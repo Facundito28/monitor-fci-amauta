@@ -1,34 +1,52 @@
 import React from 'react';
 
-// Función para obtener las categorías (Renta Fija, Variable, etc.)
+// Función segura para obtener categorías
 async function getCategorias() {
-  const res = await fetch('https://api.pub.cafci.org.ar/tipo-renta', {
-    headers: { 'origin': 'https://www.cafci.org.ar', 'user-agent': 'Mozilla/5.0' },
-    cache: 'no-store'
-  });
-  const json = await res.json();
-  return json.data || [];
+  try {
+    const res = await fetch('https://api.pub.cafci.org.ar/tipo-renta', {
+      headers: { 'origin': 'https://www.cafci.org.ar', 'user-agent': 'Mozilla/5.0' },
+      cache: 'no-store'
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return json.data || [];
+  } catch (error) {
+    return [];
+  }
 }
 
-// Función para obtener los fondos (Buscador General)
+// Función segura para obtener TODOS los fondos
 async function getFondos(query = '', categoriaId = '') {
-  let url = 'https://api.pub.cafci.org.ar/fondo?estado=1&include=entidad;gerente,tipoRenta,clase_fondo&limit=50&order=clase_fondos.nombre';
-  
-  const res = await fetch(url, {
-    headers: { 'origin': 'https://www.cafci.org.ar', 'user-agent': 'Mozilla/5.0' },
-    cache: 'no-store'
-  });
-  const json = await res.json();
-  let fondos = json.data || [];
+  try {
+    // Usamos limit=0 para traer toda la base como pide la documentación
+    let url = 'https://api.pub.cafci.org.ar/fondo?estado=1&include=entidad;gerente,tipoRenta,clase_fondo&limit=0&order=clase_fondos.nombre';
+    
+    const res = await fetch(url, {
+      headers: { 'origin': 'https://www.cafci.org.ar', 'user-agent': 'Mozilla/5.0' },
+      cache: 'no-store'
+    });
+    
+    if (!res.ok) return [];
+    
+    const json = await res.json();
+    let fondos = json.data || [];
 
-  if (query) {
-    fondos = fondos.filter((f: any) => f.nombre.toLowerCase().includes(query.toLowerCase()));
+    // Filtros
+    if (query) {
+      fondos = fondos.filter((f: any) => 
+        f.nombre && f.nombre.toLowerCase().includes(query.toLowerCase())
+      );
+    }
+    
+    if (categoriaId) {
+      // IMPORTANTE: tipoRentaId es un string en la API de CAFCI ("4"), hay que compararlo como string
+      fondos = fondos.filter((f: any) => String(f.tipoRentaId) === String(categoriaId));
+    }
+    
+    return fondos;
+  } catch (error) {
+    return [];
   }
-  if (categoriaId) {
-    fondos = fondos.filter((f: any) => String(f.tipoRentaId) === String(categoriaId));
-  }
-  
-  return fondos;
 }
 
 export default async function CompararPage({
@@ -55,7 +73,7 @@ export default async function CompararPage({
             name="q"
             defaultValue={query}
             placeholder="Ej: Ahorro Pesos..."
-            className="w-full bg-neutral-900 border border-neutral-600 p-2 rounded text-white"
+            className="w-full bg-neutral-900 border border-neutral-600 p-2 rounded text-white outline-none focus:border-blue-500"
           />
         </div>
 
@@ -64,7 +82,7 @@ export default async function CompararPage({
           <select 
             name="cat" 
             defaultValue={catId}
-            className="w-full bg-neutral-900 border border-neutral-600 p-2 rounded text-white"
+            className="w-full bg-neutral-900 border border-neutral-600 p-2 rounded text-white outline-none focus:border-blue-500"
           >
             <option value="">Todas las categorías</option>
             {categorias.map((cat: any) => (
@@ -80,7 +98,7 @@ export default async function CompararPage({
 
       <div className="bg-neutral-800 rounded-lg border border-neutral-700 overflow-hidden">
         <table className="w-full text-left text-sm">
-          <thead className="bg-neutral-900 text-gray-300">
+          <thead className="bg-neutral-900 text-gray-300 border-b border-neutral-700">
             <tr>
               <th className="p-4">Fondo</th>
               <th className="p-4">Categoría</th>
@@ -90,12 +108,12 @@ export default async function CompararPage({
           </thead>
           <tbody>
             {fondos.length > 0 ? fondos.map((fondo: any) => (
-              <tr key={fondo.id} className="border-b border-neutral-700 hover:bg-neutral-700/50">
+              <tr key={fondo.id} className="border-b border-neutral-700/50 hover:bg-neutral-700/30">
                 <td className="p-4 font-bold text-blue-400">{fondo.nombre}</td>
                 <td className="p-4">{fondo.tipoRenta?.nombre || 'N/A'}</td>
                 <td className="p-4 text-gray-400">{fondo.entidadGerente?.nombreCorto || 'N/A'}</td>
                 <td className="p-4 text-right">
-                  <button className="text-xs bg-neutral-600 px-2 py-1 rounded">Comparar</button>
+                  <button className="text-xs bg-neutral-600 hover:bg-neutral-500 transition px-2 py-1 rounded">Comparar</button>
                 </td>
               </tr>
             )) : (
