@@ -38,9 +38,18 @@ export default async function FondosPage({
   const page = Math.max(1, Number(sp.page) || 1);
 
   const [fondos, categorias, gestoras] = await Promise.all([
-    getFondosActivos().catch(() => []),
-    getTiposRenta().catch(() => []),
-    getGestoraMap().catch(() => new Map<string, string>()),
+    getFondosActivos().catch((e) => {
+      console.error("[fondos page] getFondosActivos failed:", e);
+      return [];
+    }),
+    getTiposRenta().catch((e) => {
+      console.error("[fondos page] getTiposRenta failed:", e);
+      return [];
+    }),
+    getGestoraMap().catch((e) => {
+      console.error("[fondos page] getGestoraMap failed:", e);
+      return new Map<string, string>();
+    }),
   ]);
 
   // Index categorias for fast lookup

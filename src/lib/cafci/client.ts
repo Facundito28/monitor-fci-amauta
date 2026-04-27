@@ -19,7 +19,7 @@ const HEADERS: HeadersInit = {
   origin: "https://www.cafci.org.ar",
   referer: "https://www.cafci.org.ar/",
   "user-agent":
-    "Mozilla/5.0 (Monitor FCIs Amauta — facundo@amautainversiones.com)",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
 };
 
 interface FetchOpts {
@@ -38,12 +38,25 @@ async function cafciGet<T>(
   } else {
     init.next = { revalidate };
   }
-  const res = await fetch(url, init);
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    console.error(`[cafci] network error for ${path}:`, e);
+    throw e;
+  }
   if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error(
+      `[cafci] HTTP ${res.status} for ${path} — body: ${body.slice(0, 200)}`,
+    );
     throw new Error(`CAFCI ${path} → HTTP ${res.status}`);
   }
   const json = (await res.json()) as CafciResponse<T>;
   if (!json.success) {
+    console.error(
+      `[cafci] success=false for ${path}: ${JSON.stringify(json).slice(0, 200)}`,
+    );
     throw new Error(`CAFCI ${path} → ${JSON.stringify(json).slice(0, 120)}`);
   }
   return json.data;
