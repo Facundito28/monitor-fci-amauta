@@ -26,6 +26,38 @@ export interface Entidad {
 }
 
 /**
+ * One row of /estadisticas/informacion/diaria/{categoriaId}/{fecha}.
+ *
+ * The endpoint mixes aggregates (no `fecha` field) with per-class records
+ * (have `fecha` like "DD/MM/YY"). Filter to those where fecha is set.
+ */
+export interface DailyStatRow {
+  /** Display name from CAFCI: either "Fondo X" or "Fondo X - Clase A". */
+  fondo: string;
+  /** Date in DD/MM/YY format. */
+  fecha: string;
+  /** "COR" / "MED" / "LAR". */
+  horizonte: string;
+  /** Valor cuotaparte. */
+  vcp: number;
+  /** Cantidad de cuotapartes — empty string when missing. */
+  ccp: number | string;
+  /** AUM in pesos — empty string when missing. */
+  patrimonio: number | string;
+}
+
+/**
+ * Latest snapshot for the whole market: combined daily stats across all
+ * categories for a single business date.
+ */
+export interface LatestSnapshot {
+  /** ISO YYYY-MM-DD of the snapshot. */
+  fecha: string;
+  /** All per-class records across all categories on that date. */
+  rows: DailyStatRow[];
+}
+
+/**
  * Fondo as returned by /fondo?include=tipoRenta
  * Foreign key IDs come as strings.
  */

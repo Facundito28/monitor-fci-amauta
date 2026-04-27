@@ -1,6 +1,18 @@
 import Link from "next/link";
+import { fmtCompactCurrency } from "@/lib/utils/format";
+import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
 
-export default function Home() {
+// Live snapshot — refresh on each request (CAFCI dedups inside the request).
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const snap = await getMarketSnapshot().catch(() => null);
+
+  const kpiFondos = snap?.rows.length ?? null;
+  const kpiCats = snap?.categorias.length ?? null;
+  const kpiFecha = snap?.fecha ? fmtDateAr(snap.fecha) : null;
+  const kpiAum = snap?.aumTotal ?? null;
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Hero */}
@@ -14,7 +26,7 @@ export default function Home() {
               Monitor de Fondos Comunes de Inversión
             </h1>
             <p className="mt-5 text-lg text-white/80 max-w-xl leading-relaxed">
-              Consulte, compare y analice los FCIs argentinos con datos
+              Consultá, compará y analizá los FCIs argentinos con datos
               actualizados todos los días. Rendimiento real, TIR diaria y
               benchmarks del mercado local en una sola vista.
             </p>
@@ -34,13 +46,29 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="hidden lg:block">
-            <div className="relative aspect-square max-w-md mx-auto rounded-2xl bg-gradient-to-br from-amauta-bordo to-amauta-dark p-8 border border-white/10 shadow-2xl">
-              <div className="absolute top-6 right-6 text-amauta-yellow text-7xl font-extrabold leading-none">✦</div>
-              <div className="space-y-3 mt-12">
-                <KpiSkel label="Fondos monitoreados" value="—" />
-                <KpiSkel label="Categorías" value="—" />
-                <KpiSkel label="Última actualización" value="—" />
+          {/* KPI panel */}
+          <div className="lg:justify-self-end w-full max-w-md">
+            <div className="relative aspect-square rounded-2xl bg-gradient-to-br from-amauta-bordo to-amauta-dark p-8 border border-white/10 shadow-2xl">
+              <div className="absolute top-6 right-6 text-amauta-yellow text-7xl font-extrabold leading-none">
+                ✦
+              </div>
+              <div className="space-y-3 mt-12 relative">
+                <Kpi
+                  label="Clases monitoreadas"
+                  value={kpiFondos != null ? kpiFondos.toLocaleString("es-AR") : "—"}
+                />
+                <Kpi
+                  label="Categorías"
+                  value={kpiCats != null ? kpiCats.toString() : "—"}
+                />
+                <Kpi
+                  label="Patrimonio agregado (AUM)"
+                  value={kpiAum != null ? fmtCompactCurrency(kpiAum, "ARS") : "—"}
+                />
+                <Kpi
+                  label="Última actualización"
+                  value={kpiFecha ?? "—"}
+                />
               </div>
             </div>
           </div>
@@ -60,27 +88,27 @@ export default function Home() {
 
           <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <Feature
-              title="TIR del día"
-              body="VCP de hoy vs cierre anterior, anualizado en TNA y TEA. Para money market y renta fija corta lo ves al instante."
+              title="Listado completo"
+              body="Todas las clases activas con VCP, patrimonio y categoría — actualizado todos los días post-cierre."
             />
             <Feature
-              title="Períodos custom"
-              body="Cualquier ventana de fechas — no solo 30/90 días. Selector libre desde/hasta en gráficos y comparador."
+              title="TIR del día (próximamente)"
+              body="VCP de hoy vs cierre anterior anualizado en TNA y TEA. En desarrollo: requiere histórico que estamos almacenando."
             />
             <Feature
               title="Comparar hasta 4 fondos"
-              body="Curva base 100, tabla lado a lado, métricas de riesgo. Compartí la vista por link."
+              body="Selector con buscador y tabla lado a lado: VCP, AUM, gestora, categoría. Permalink para compartir."
             />
             <Feature
-              title="Rentabilidad real"
-              body="Rendimientos descontando IPC del INDEC. Mirá lo que verdaderamente ganás en pesos constantes."
+              title="Rankings por AUM y categoría"
+              body="Top fondos por patrimonio en cada categoría. Filtrá por horizonte para encontrar el mix que necesitás."
             />
             <Feature
-              title="Benchmarks AR"
-              body="Plazo Fijo BADLAR, MEP, CCL y Merval superpuestos sobre la curva del fondo."
+              title="Períodos custom (próximamente)"
+              body="Cualquier ventana de fechas — no solo 30/90 días. En cuanto tengamos serie histórica, llega."
             />
             <Feature
-              title="Permalinks"
+              title="Permalinks compartibles"
               body="Cada filtro y comparación queda en la URL. Copiás, pegás y tu compañero ve lo mismo."
             />
           </div>
@@ -90,11 +118,15 @@ export default function Home() {
   );
 }
 
-function KpiSkel({ label, value }: { label: string; value: string }) {
+function Kpi({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-white/5 border border-white/10 px-4 py-3 backdrop-blur-sm">
-      <div className="text-[11px] uppercase tracking-wider text-white/60">{label}</div>
-      <div className="text-2xl font-extrabold text-amauta-yellow mt-0.5">{value}</div>
+      <div className="text-[11px] uppercase tracking-wider text-white/60">
+        {label}
+      </div>
+      <div className="text-2xl font-extrabold text-amauta-yellow mt-0.5 tabular-nums">
+        {value}
+      </div>
     </div>
   );
 }
@@ -103,7 +135,9 @@ function Feature({ title, body }: { title: string; body: string }) {
   return (
     <article className="rounded-lg border border-amauta-bg-light p-6 hover:border-amauta-yellow transition-colors">
       <h3 className="font-bold text-amauta-bordo">{title}</h3>
-      <p className="mt-2 text-sm text-amauta-text-secondary leading-relaxed">{body}</p>
+      <p className="mt-2 text-sm text-amauta-text-secondary leading-relaxed">
+        {body}
+      </p>
     </article>
   );
 }
