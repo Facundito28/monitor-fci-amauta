@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  /* Amauta Inversiones brand palette */
+  --color-amauta-yellow: #f3cf11;
+  --color-amauta-yellow-hover: #d9b80f;
+  --color-amauta-bordo: #621044;
+  --color-amauta-bordo-hover: #4a0c34;
+  --color-amauta-dark: #231f20;
+  --color-amauta-bg-light: #f1f1f1;
+  --color-amauta-text: #000000;
+  --color-amauta-text-secondary: #666666;
+  --color-amauta-text-tertiary: #58585a;
+
+  --color-background: #ffffff;
+  --color-foreground: #000000;
+
+  --font-sans: var(--font-fira-sans), system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
