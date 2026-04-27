@@ -27,6 +27,9 @@ export const metadata = {
     "Listado completo de Fondos Comunes de Inversión argentinos con filtros por categoría y sociedad gerente.",
 };
 
+// Always render fresh on each request — CAFCI fetch is server-side and fast enough.
+export const dynamic = "force-dynamic";
+
 export default async function FondosPage({
   searchParams,
 }: {

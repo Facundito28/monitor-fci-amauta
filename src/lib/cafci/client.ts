@@ -22,25 +22,14 @@ const HEADERS: HeadersInit = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
 };
 
-interface FetchOpts {
-  /** Cache strategy. Default: revalidate every 30 min on the server. */
-  revalidate?: number | false;
-}
-
-async function cafciGet<T>(
-  path: string,
-  { revalidate = 1800 }: FetchOpts = {},
-): Promise<T> {
+async function cafciGet<T>(path: string): Promise<T> {
   const url = `${BASE}${path}`;
-  const init: RequestInit = { headers: HEADERS };
-  if (revalidate === false) {
-    init.cache = "no-store";
-  } else {
-    init.next = { revalidate };
-  }
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await fetch(url, {
+      headers: HEADERS,
+      cache: "no-store",
+    });
   } catch (e) {
     console.error(`[cafci] network error for ${path}:`, e);
     throw e;
@@ -62,22 +51,21 @@ async function cafciGet<T>(
   return json.data;
 }
 
-/** Lista de categorías (tipos de renta). Cambia muy poco — cache 24h. */
+/** Lista de categorías (tipos de renta). */
 export function getTiposRenta(): Promise<TipoRenta[]> {
-  return cafciGet<TipoRenta[]>("/tipo-renta", { revalidate: 86_400 });
+  return cafciGet<TipoRenta[]>("/tipo-renta");
 }
 
 /** Listado completo de fondos activos con tipoRenta resuelto. */
 export function getFondosActivos(): Promise<Fondo[]> {
   return cafciGet<Fondo[]>(
     "/fondo?estado=1&include=tipoRenta&limit=0&order=nombre",
-    { revalidate: 1800 },
   );
 }
 
 /** Listado de entidades (sociedades gerentes y depositarias). */
 export function getEntidades(): Promise<Entidad[]> {
-  return cafciGet<Entidad[]>("/entidad?limit=0", { revalidate: 86_400 });
+  return cafciGet<Entidad[]>("/entidad?limit=0");
 }
 
 /**
