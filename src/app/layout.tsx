@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fira_Sans } from "next/font/google";
 import Link from "next/link";
 import Image from "next/image";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const firaSans = Fira_Sans({
@@ -30,6 +31,7 @@ export default function RootLayout({
         <Header />
         <main className="flex-1 flex flex-col">{children}</main>
         <Footer />
+        <SpeedInsights />
       </body>
     </html>
   );
