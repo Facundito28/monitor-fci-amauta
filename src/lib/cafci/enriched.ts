@@ -10,6 +10,7 @@ import {
   buildVcpMapForDate,
   fondoBaseName,
   getAllStatsByDate,
+  getDailyStatsByCategory,
   getFondoFicha,
   getFondosActivos,
   getGestoraMap,
@@ -263,6 +264,24 @@ export async function getFondoFichaData(
 ): Promise<FichaData | null> {
   if (!fondoId || !claseId) return null;
   return getFondoFicha(fondoId, claseId);
+}
+
+/**
+ * Fetch the VCP of a specific fund on a given date.
+ * Rolls weekends back to Friday automatically.
+ * Returns { vcp, date } with the actual date used, or null if not found.
+ */
+export async function getFundVcpOnDate(
+  tipoRentaId: string | null,
+  fundKey: string,
+  fecha: string,
+): Promise<{ vcp: number; date: string } | null> {
+  if (!tipoRentaId) return null;
+  const adjusted = adjustForWeekend(fecha);
+  const rows = await getDailyStatsByCategory(tipoRentaId, adjusted).catch(() => []);
+  const match = rows.find((r) => r.fondo === fundKey);
+  if (!match || typeof match.vcp !== "number") return null;
+  return { vcp: match.vcp, date: adjusted };
 }
 
 function horizonteFromCode(code: string | undefined): string | null {

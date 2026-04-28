@@ -11,6 +11,7 @@ import Link from "next/link";
 import {
   fmtDateAr,
   getFondoFichaData,
+  getFundVcpOnDate,
   getMarketSnapshotWithReturns,
 } from "@/lib/cafci/enriched";
 import type { CartHolding, FichaData } from "@/lib/cafci/enriched";
@@ -20,11 +21,15 @@ export const dynamic = "force-dynamic";
 
 export default async function FondoDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ key: string }>;
+  searchParams: Promise<{ desde?: string; hasta?: string }>;
 }) {
-  const { key } = await params;
+  const [{ key }, sp] = await Promise.all([params, searchParams]);
   const displayName = decodeURIComponent(key);
+  const desde = sp.desde?.trim() ?? "";
+  const hasta = sp.hasta?.trim() ?? "";
 
   const snap = await getMarketSnapshotWithReturns().catch(() => null);
 
@@ -51,6 +56,52 @@ export default async function FondoDetailPage({
       ?.filter((c) => c.nombreActivo && c.share > 0)
       .sort((a, b) => b.share - a.share) ?? null;
   const honorarios = ficha?.info?.mensual?.honorariosComisiones;
+
+  // ── Custom date range query ────────────────────────────────────────────────
+  type CustomResult = {
+    vcpDesde: number;
+    dateDesde: string;
+    vcpHasta: number;
+    dateHasta: string;
+    ret: number;
+    dias: number;
+    tna: number;
+  };
+  let customResult: CustomResult | null = null;
+  let customError: string | null = null;
+
+  if (desde && hasta) {
+    if (desde >= hasta) {
+      customError = "La fecha inicio debe ser anterior a la fecha fin.";
+    } else {
+      const [vcpDesdeData, vcpHastaData] = await Promise.all([
+        getFundVcpOnDate(fondo.tipoRentaId, fondo.key, desde).catch(() => null),
+        getFundVcpOnDate(fondo.tipoRentaId, fondo.key, hasta).catch(() => null),
+      ]);
+      if (!vcpDesdeData) {
+        customError = `No hay datos para la fecha inicio (${fmtDateAr(desde)}). Probá con otro día hábil.`;
+      } else if (!vcpHastaData) {
+        customError = `No hay datos para la fecha fin (${fmtDateAr(hasta)}). Probá con otro día hábil.`;
+      } else {
+        const ret = ((vcpHastaData.vcp / vcpDesdeData.vcp) - 1) * 100;
+        const dias = Math.round(
+          (new Date(vcpHastaData.date + "T12:00:00Z").getTime() -
+            new Date(vcpDesdeData.date + "T12:00:00Z").getTime()) /
+            (1000 * 60 * 60 * 24),
+        );
+        const tna = dias > 0 ? ret * (365 / dias) : 0;
+        customResult = {
+          vcpDesde: vcpDesdeData.vcp,
+          dateDesde: vcpDesdeData.date,
+          vcpHasta: vcpHastaData.vcp,
+          dateHasta: vcpHastaData.date,
+          ret,
+          dias,
+          tna,
+        };
+      }
+    }
+  }
 
   return (
     <div className="bg-amauta-bg-light flex-1">
@@ -149,7 +200,6 @@ export default async function FondoDetailPage({
                 {/*
                   "Rendimiento" = simple % (igual a lo que muestra CAFCI: "Del día", "Del mes", etc.)
                   "TNA" = tasa nominal anual desde CAFCI /ficha, o calculado como simple × (365/días)
-                  Para 1D: CAFCI llama "Del día" desde el último cierre hábil anterior (suele ser 3 días calendario si hoy es lunes)
                 */}
                 <ReturnRowFicha
                   label="Del día (1D)"
@@ -183,6 +233,123 @@ export default async function FondoDetailPage({
             Rendimiento simple calculado sobre VCP de CAFCI ·
             TNA = tasa nominal anual {ficha ? "oficial de CAFCI (/ficha)" : "estimada (rendimiento × 365/días)"}
           </div>
+        </section>
+
+        {/* ── Período Custom ── */}
+        <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
+          <header className="bg-amauta-dark text-white px-4 py-3">
+            <h2 className="font-extrabold text-sm uppercase tracking-wider">
+              Rendimiento por período custom
+            </h2>
+          </header>
+          <form method="GET" className="px-4 py-4">
+            <div className="flex flex-wrap gap-4 items-end">
+              <div>
+                <label
+                  htmlFor="desde"
+                  className="block text-xs font-bold text-amauta-text-tertiary uppercase tracking-wider mb-1"
+                >
+                  Fecha inicio
+                </label>
+                <input
+                  id="desde"
+                  type="date"
+                  name="desde"
+                  defaultValue={desde}
+                  max={fondo.fecha}
+                  className="rounded-md border border-amauta-bg-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-amauta-yellow focus:ring-2 focus:ring-amauta-yellow/30"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="hasta"
+                  className="block text-xs font-bold text-amauta-text-tertiary uppercase tracking-wider mb-1"
+                >
+                  Fecha fin
+                </label>
+                <input
+                  id="hasta"
+                  type="date"
+                  name="hasta"
+                  defaultValue={hasta}
+                  max={fondo.fecha}
+                  className="rounded-md border border-amauta-bg-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-amauta-yellow focus:ring-2 focus:ring-amauta-yellow/30"
+                />
+              </div>
+              <button
+                type="submit"
+                className="rounded-md bg-amauta-yellow text-amauta-dark font-bold px-5 py-2 text-sm hover:bg-amauta-yellow-hover transition-colors"
+              >
+                Consultar
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-amauta-text-tertiary">
+              Ingresá dos días hábiles · la fecha máxima es el último cierre ({fmtDateAr(fondo.fecha)})
+            </p>
+          </form>
+
+          {customError && (
+            <div className="mx-4 mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              {customError}
+            </div>
+          )}
+
+          {customResult && (
+            <div className="border-t border-amauta-bg-light">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-amauta-bg-light/50 text-amauta-text-tertiary text-xs uppercase">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-bold">Concepto</th>
+                      <th className="px-4 py-2 text-right font-bold">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t border-amauta-bg-light">
+                      <td className="px-4 py-2 text-amauta-text-secondary">
+                        VCP al {fmtDateAr(customResult.dateDesde)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold text-amauta-text-secondary">
+                        {fmtNumber(customResult.vcpDesde, 4)}
+                      </td>
+                    </tr>
+                    <tr className="border-t border-amauta-bg-light">
+                      <td className="px-4 py-2 text-amauta-text-secondary">
+                        VCP al {fmtDateAr(customResult.dateHasta)}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold text-amauta-text-secondary">
+                        {fmtNumber(customResult.vcpHasta, 4)}
+                      </td>
+                    </tr>
+                    <tr className="border-t border-amauta-bg-light bg-amauta-yellow/5">
+                      <td className="px-4 py-3 font-bold text-amauta-bordo">
+                        Rendimiento del período ({customResult.dias} días)
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right tabular-nums text-lg font-extrabold ${
+                          fmtReturn(customResult.ret, 2).colorClass
+                        }`}
+                      >
+                        {fmtReturn(customResult.ret, 2).text}
+                      </td>
+                    </tr>
+                    <tr className="border-t border-amauta-bg-light">
+                      <td className="px-4 py-2 text-amauta-text-secondary">
+                        TNA estimada (simple × 365/días)
+                      </td>
+                      <td
+                        className={`px-4 py-2 text-right tabular-nums font-semibold text-xs ${
+                          fmtReturn(customResult.tna, 2).colorClass
+                        }`}
+                      >
+                        {fmtReturn(customResult.tna, 2).text}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* ── Composición de Cartera ── */}
@@ -344,8 +511,8 @@ function ComposicionSection({
         </div>
       ) : (
         <>
-          {/* Horizontal bar chart */}
-          <div className="px-4 pt-4 pb-2">
+          {/* Horizontal bar chart — top 10 holdings */}
+          <div className="px-4 pt-4 pb-4">
             {carteras.slice(0, 10).map((h, i) => (
               <div key={i} className="mb-3">
                 <div className="flex items-center justify-between text-xs mb-1">
@@ -370,40 +537,8 @@ function ComposicionSection({
               </div>
             ))}
           </div>
-
-          {/* Detail table */}
-          <div className="overflow-x-auto border-t border-amauta-bg-light">
-            <table className="w-full text-sm">
-              <thead className="bg-amauta-bg-light/50 text-amauta-text-tertiary text-xs uppercase">
-                <tr>
-                  <th className="px-4 py-2 text-left font-bold">Activo</th>
-                  <th className="px-4 py-2 text-left font-bold">Tipo</th>
-                  <th className="px-4 py-2 text-right font-bold">Peso</th>
-                </tr>
-              </thead>
-              <tbody>
-                {carteras.map((h, i) => (
-                  <tr
-                    key={i}
-                    className="border-t border-amauta-bg-light hover:bg-amauta-bg-light/40"
-                  >
-                    <td className="px-4 py-2 font-medium text-amauta-bordo">
-                      {h.nombreActivo}
-                    </td>
-                    <td className="px-4 py-2 text-amauta-text-tertiary text-xs">
-                      {h.tipoActivo ?? "—"}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums font-semibold text-amauta-text-secondary">
-                      {fmtNumber(h.share, 2)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="px-4 py-2 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light">
-            Composición semanal · Fuente: CAFCI. Verificar con la fuente
-            oficial.
+          <p className="px-4 pb-3 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light pt-2">
+            Composición semanal · Fuente: CAFCI. Verificar con la fuente oficial.
           </p>
         </>
       )}

@@ -90,26 +90,32 @@ export default async function Home() {
             <Feature
               title="Listado completo"
               body="Todas las clases activas con VCP, patrimonio y categoría — actualizado todos los días post-cierre."
+              href="/fondos"
             />
             <Feature
-              title="TIR del día (próximamente)"
-              body="VCP de hoy vs cierre anterior anualizado en TNA y TEA. En desarrollo: requiere histórico que estamos almacenando."
+              title="Rendimiento por período"
+              body="Elegí fecha inicio y fecha fin en cualquier fondo y calculá el rendimiento real del período con TNA estimada."
+              href="/fondos"
             />
             <Feature
               title="Comparar hasta 4 fondos"
-              body="Selector con buscador y tabla lado a lado: VCP, AUM, gestora, categoría. Permalink para compartir."
+              body="Selector con buscador y tabla lado a lado: VCP, AUM, gestora, categoría, rendimientos. Permalink para compartir."
+              href="/comparar"
             />
             <Feature
               title="Rankings por AUM y categoría"
               body="Top fondos por patrimonio en cada categoría. Filtrá por horizonte para encontrar el mix que necesitás."
+              href="/rankings"
             />
             <Feature
-              title="Períodos custom (próximamente)"
-              body="Cualquier ventana de fechas — no solo 30/90 días. En cuanto tengamos serie histórica, llega."
+              title="Ficha completa de cada fondo"
+              body="VCP, composición de cartera semanal, honorarios y rendimientos oficiales de CAFCI en una sola vista."
+              href="/fondos"
             />
             <Feature
               title="Permalinks compartibles"
               body="Cada filtro y comparación queda en la URL. Copiás, pegás y tu compañero ve lo mismo."
+              href="/comparar"
             />
           </div>
         </div>
@@ -131,13 +137,45 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Feature({ title, body }: { title: string; body: string }) {
-  return (
-    <article className="rounded-lg border border-amauta-bg-light p-6 hover:border-amauta-yellow transition-colors">
-      <h3 className="font-bold text-amauta-bordo">{title}</h3>
+function Feature({
+  title,
+  body,
+  href,
+}: {
+  title: string;
+  body: string;
+  href?: string;
+}) {
+  const inner = (
+    <>
+      <h3 className="font-bold text-amauta-bordo group-hover:text-amauta-bordo">
+        {title}
+      </h3>
       <p className="mt-2 text-sm text-amauta-text-secondary leading-relaxed">
         {body}
       </p>
+      {href && (
+        <span className="mt-3 inline-block text-xs font-bold text-amauta-yellow opacity-0 group-hover:opacity-100 transition-opacity">
+          Ver →
+        </span>
+      )}
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="group block rounded-lg border border-amauta-bg-light p-6 hover:border-amauta-yellow hover:shadow-sm transition-all cursor-pointer"
+      >
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <article className="rounded-lg border border-amauta-bg-light p-6">
+      {inner}
     </article>
   );
 }
