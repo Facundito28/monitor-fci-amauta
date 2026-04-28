@@ -193,6 +193,23 @@ export function subtractDays(isoDate: string, days: number): string {
 }
 
 /**
+ * If `isoDate` lands on a weekend, roll back to the previous Friday.
+ * CAFCI publishes no data on Saturday (day=6) or Sunday (day=0).
+ *
+ * Examples:
+ *   Sunday  2026-04-26 → Friday 2026-04-24
+ *   Saturday 2026-04-25 → Friday 2026-04-24
+ *   Monday  2026-04-27 → unchanged
+ */
+export function adjustForWeekend(isoDate: string): string {
+  const d = new Date(isoDate + "T12:00:00Z");
+  const day = d.getUTCDay(); // 0=Sun, 6=Sat
+  if (day === 0) return subtractDays(isoDate, 2); // Sun → Fri
+  if (day === 6) return subtractDays(isoDate, 1); // Sat → Fri
+  return isoDate;
+}
+
+/**
  * Build a displayName→vcp map for all fund classes on a specific date.
  * Accepts a pre-fetched tipos list to avoid redundant API calls.
  */

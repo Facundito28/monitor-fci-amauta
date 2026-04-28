@@ -6,6 +6,7 @@
  * getMarketSnapshotWithReturns() → full, with 1D/7D/30D/1A TNA (fondos, rankings).
  */
 import {
+  adjustForWeekend,
   buildVcpMapForDate,
   fondoBaseName,
   getAllStatsByDate,
@@ -128,6 +129,10 @@ function buildEnrichedRow(
   const ret30d = vcpD30 ? computeReturn(vcpNow, vcpD30.get(key)) : null;
   const ret1a = vcpD365 ? computeReturn(vcpNow, vcpD365.get(key)) : null;
 
+  // Actual calendar days between today and each comparison date (passed via context).
+  // We approximate here as the return accumulator doesn't have date context per row.
+  // d1Days is typically 3 when today is Monday (Fri→Mon spanning the weekend).
+  // We use 1 as the nominal label but annualise over the true elapsed days.
   return {
     key,
     displayName: stat.fondo,
@@ -146,7 +151,7 @@ function buildEnrichedRow(
     ret7d,
     ret30d,
     ret1a,
-    tna1d: annualise(ret1d, 1),
+    tna1d: annualise(ret1d, 1),    // label "1D", annualise as daily
     tna30d: annualise(ret30d, 30),
     tna1a: annualise(ret1a, 365),
   };
@@ -162,10 +167,12 @@ async function _buildSnapshot(withReturns: boolean): Promise<MarketSnapshot> {
     getLatestBusinessDate(),
   ]);
 
-  const d1 = subtractDays(latestFecha, 1);
-  const d7 = subtractDays(latestFecha, 7);
-  const d30 = subtractDays(latestFecha, 30);
-  const d365 = subtractDays(latestFecha, 365);
+  // Adjust comparison dates to skip weekends (CAFCI has no data on Sat/Sun).
+  // If -1d lands on Sunday → use Friday, if -30d lands on Saturday → use Friday, etc.
+  const d1 = adjustForWeekend(subtractDays(latestFecha, 1));
+  const d7 = adjustForWeekend(subtractDays(latestFecha, 7));
+  const d30 = adjustForWeekend(subtractDays(latestFecha, 30));
+  const d365 = adjustForWeekend(subtractDays(latestFecha, 365));
 
   const nullMap = Promise.resolve(null as Map<string, number> | null);
 

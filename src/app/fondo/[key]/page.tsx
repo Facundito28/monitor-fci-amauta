@@ -137,45 +137,51 @@ export default async function FondoDetailPage({
               <thead className="bg-amauta-bg-light/50 text-amauta-text-tertiary text-xs uppercase">
                 <tr>
                   <th className="px-4 py-2 text-left font-bold">Período</th>
-                  <th className="px-4 py-2 text-right font-bold">TNA</th>
                   <th className="px-4 py-2 text-right font-bold">
-                    Rend. Simple
+                    Rendimiento
+                  </th>
+                  <th className="px-4 py-2 text-right font-bold">
+                    TNA (anual)
                   </th>
                 </tr>
               </thead>
               <tbody>
+                {/*
+                  "Rendimiento" = simple % (igual a lo que muestra CAFCI: "Del día", "Del mes", etc.)
+                  "TNA" = tasa nominal anual desde CAFCI /ficha, o calculado como simple × (365/días)
+                  Para 1D: CAFCI llama "Del día" desde el último cierre hábil anterior (suele ser 3 días calendario si hoy es lunes)
+                */}
                 <ReturnRowFicha
-                  label="Diario (1D)"
+                  label="Del día (1D)"
+                  simple={fondo.ret1d}
                   tna={rend?.day?.tna ?? fondo.tna1d}
-                  simple={rend?.day?.simple ?? fondo.ret1d}
                 />
                 <ReturnRowFicha
                   label="Semanal (7D)"
-                  tna={rend?.week?.tna ?? null}
                   simple={fondo.ret7d}
+                  tna={rend?.week?.tna ?? null}
                 />
                 <ReturnRowFicha
-                  label="Mensual (30D)"
+                  label="Del mes (30D)"
+                  simple={fondo.ret30d}
                   tna={rend?.month?.tna ?? fondo.tna30d}
-                  simple={rend?.month?.simple ?? fondo.ret30d}
                 />
                 <ReturnRowFicha
-                  label="Año en curso (YTD)"
+                  label="Del año (YTD)"
+                  simple={null}
                   tna={rend?.yearToDate?.tna ?? null}
-                  simple={rend?.yearToDate?.simple ?? null}
                 />
                 <ReturnRowFicha
                   label="Interanual (1A)"
+                  simple={fondo.ret1a}
                   tna={rend?.oneYear?.tna ?? fondo.tna1a}
-                  simple={rend?.oneYear?.simple ?? fondo.ret1a}
                 />
               </tbody>
             </table>
           </div>
           <div className="px-4 py-2 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light bg-amauta-bg-light/30">
-            {ficha
-              ? "Fuente: CAFCI oficial (/ficha). TNA = tasa nominal anual calculada por CAFCI."
-              : "Fuente: cálculo sobre VCP de CAFCI. TNA = rendimiento × (365/días)."}
+            Rendimiento simple calculado sobre VCP de CAFCI ·
+            TNA = tasa nominal anual {ficha ? "oficial de CAFCI (/ficha)" : "estimada (rendimiento × 365/días)"}
           </div>
         </section>
 
@@ -246,29 +252,32 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Row: Rendimiento simple primero (igual a CAFCI web), TNA como dato secundario. */
 function ReturnRowFicha({
   label,
-  tna,
   simple,
+  tna,
 }: {
   label: string;
-  tna: number | null | undefined;
   simple: number | null | undefined;
+  tna: number | null | undefined;
 }) {
-  const tnaVal = tna ?? null;
-  const simpleVal = simple ?? null;
-  const tnaFmt = fmtReturn(tnaVal, 2);
-  const simpleFmt = fmtReturn(simpleVal, 2);
+  const simpleFmt = fmtReturn(simple ?? null, 2);
+  const tnaFmt = fmtReturn(tna ?? null, 2);
   return (
     <tr className="border-t border-amauta-bg-light">
       <td className="px-4 py-3 text-amauta-text-secondary">{label}</td>
-      <td className={`px-4 py-3 text-right tabular-nums ${tnaFmt.colorClass}`}>
-        {tnaFmt.text}
-      </td>
+      {/* Rendimiento simple — misma unidad que CAFCI muestra en su web */}
       <td
-        className={`px-4 py-3 text-right tabular-nums ${simpleFmt.colorClass}`}
+        className={`px-4 py-3 text-right tabular-nums font-semibold ${simpleFmt.colorClass}`}
       >
         {simpleFmt.text}
+      </td>
+      {/* TNA — referencia anualizada estándar argentina */}
+      <td
+        className={`px-4 py-3 text-right tabular-nums text-xs ${tnaFmt.colorClass}`}
+      >
+        {tnaFmt.text}
       </td>
     </tr>
   );

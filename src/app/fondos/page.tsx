@@ -170,7 +170,7 @@ export default async function FondosPage({
                   <th className="px-3 py-3 text-left font-bold">Gestora</th>
                   <SortableHeader label="VCP" sortKey="vcp_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
                   <SortableHeader label="Patrimonio" sortKey="patrimonio_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
-                  <SortableHeader label="TNA 1D" sortKey="ret1d_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
+                  <SortableHeader label="Rend. 1D" sortKey="ret1d_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
                   <SortableHeader label="Rend. 30D" sortKey="ret30d_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
                   <SortableHeader label="Rend. 1A" sortKey="ret1a_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
                 </tr>
@@ -184,7 +184,9 @@ export default async function FondosPage({
                   </tr>
                 ) : (
                   pageRows.map((r, i) => {
-                    const tna1d = fmtReturn(r.tna1d, 2);
+                    // Mostramos rendimiento SIMPLE (igual a como lo muestra CAFCI en su web)
+                    // para el día, 30d y 1a. TNA 1D también disponible en detalle del fondo.
+                    const ret1d = fmtReturn(r.ret1d, 2);
                     const ret30d = fmtReturn(r.ret30d, 2);
                     const ret1a = fmtReturn(r.ret1a, 2);
                     return (
@@ -215,8 +217,8 @@ export default async function FondosPage({
                         <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
                           {r.patrimonio ? fmtCompactCurrency(r.patrimonio, "ARS") : "—"}
                         </td>
-                        <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${tna1d.colorClass}`}>
-                          {tna1d.text}
+                        <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret1d.colorClass}`}>
+                          {ret1d.text}
                         </td>
                         <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret30d.colorClass}`}>
                           {ret30d.text}
@@ -249,8 +251,8 @@ export default async function FondosPage({
         </div>
 
         <p className="mt-4 text-xs text-amauta-text-tertiary">
-          TNA 1D = rendimiento diario anualizado. Rend. 30D / 1A = retorno simple del período.
-          Próximamente: ventanas custom y exportación CSV.
+          Rend. 1D / 30D / 1A = rendimiento simple del período (igual a como lo muestra CAFCI).
+          Hacé click en el nombre de un fondo para ver la ficha completa con composición de cartera.
         </p>
       </div>
     </div>
