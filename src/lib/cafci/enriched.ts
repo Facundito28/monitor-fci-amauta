@@ -43,6 +43,8 @@ export interface EnrichedRow {
   gestora: string | null;
   /** "Corto Plazo" / "Mediano Plazo" / "Largo Plazo". */
   horizonte: string | null;
+  /** Currency label: "Pesos" | "USD" | null */
+  moneda: string | null;
   /** ISO YYYY-MM-DD of this row's data. */
   fecha: string;
   /** Valor cuotaparte. */
@@ -74,12 +76,19 @@ export interface MarketSnapshot {
   rows: EnrichedRow[];
   categorias: string[];
   gestoras: string[];
+  monedas: string[];
   aumTotal: number;
   /** True when return columns (ret*, tna*) have been populated. */
   hasReturns: boolean;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function monedaIdToLabel(id: string | undefined): string | null {
+  if (id === "1") return "Pesos";
+  if (id === "2") return "USD";
+  return null;
+}
 
 function computeReturn(vcpNow: number, vcpThen: number | undefined): number | null {
   if (!vcpThen || vcpThen === 0) return null;
@@ -110,6 +119,7 @@ function buildEnrichedRow(
     : null;
   const horizonte =
     parent?.horizonteViejo ?? horizonteFromCode(stat.horizonte);
+  const moneda = monedaIdToLabel(parent?.monedaId);
   const patrimonio = typeof stat.patrimonio === "number" ? stat.patrimonio : null;
   const ccp = typeof stat.ccp === "number" ? stat.ccp : null;
 
@@ -143,6 +153,7 @@ function buildEnrichedRow(
     categoria,
     gestora,
     horizonte,
+    moneda,
     fecha,
     vcp: vcpNow,
     ccp,
@@ -192,6 +203,7 @@ async function _buildSnapshot(withReturns: boolean): Promise<MarketSnapshot> {
   const rows: EnrichedRow[] = [];
   const categoriasSet = new Set<string>();
   const gestorasSet = new Set<string>();
+  const monedasSet = new Set<string>();
   let aumTotal = 0;
 
   for (const stat of todayStats) {
@@ -207,6 +219,7 @@ async function _buildSnapshot(withReturns: boolean): Promise<MarketSnapshot> {
     );
     if (row.categoria) categoriasSet.add(row.categoria);
     if (row.gestora) gestorasSet.add(row.gestora);
+    if (row.moneda) monedasSet.add(row.moneda);
     if (row.patrimonio) aumTotal += row.patrimonio;
     rows.push(row);
   }
@@ -216,6 +229,7 @@ async function _buildSnapshot(withReturns: boolean): Promise<MarketSnapshot> {
     rows,
     categorias: Array.from(categoriasSet).sort(),
     gestoras: Array.from(gestorasSet).sort(),
+    monedas: Array.from(monedasSet).sort(),
     aumTotal,
     hasReturns: withReturns,
   };

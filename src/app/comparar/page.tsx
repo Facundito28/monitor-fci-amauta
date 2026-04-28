@@ -5,8 +5,8 @@
  * Permalink compartible con compañeros.
  */
 import Link from "next/link";
-import { fmtCompactCurrency, fmtNumber } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
+import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
 import type { EnrichedRow } from "@/lib/cafci/enriched";
 
 const MAX_FONDOS = 4;
@@ -37,7 +37,7 @@ export default async function CompararPage({
     .slice(0, MAX_FONDOS);
   const query = (sp.q ?? "").trim();
 
-  const snap = await getMarketSnapshot().catch(() => null);
+  const snap = await getMarketSnapshotWithReturns().catch(() => null);
 
   if (!snap) {
     return (
@@ -86,14 +86,13 @@ export default async function CompararPage({
             Comparador de fondos
           </h1>
           <p className="mt-1 text-sm text-amauta-text-secondary">
-            Hasta {MAX_FONDOS} clases lado a lado · cierre {fmtDateAr(snap.fecha)} · permalink
-            compartible
+            Hasta {MAX_FONDOS} clases lado a lado · cierre{" "}
+            {fmtDateAr(snap.fecha)} · permalink compartible
           </p>
         </div>
 
         {/* Search box to add fondos */}
         <form className="bg-white rounded-lg border border-amauta-bg-light p-4 mb-6">
-          {/* Preserve selected keys when submitting search */}
           {selectedKeys.length > 0 && (
             <input
               type="hidden"
@@ -105,7 +104,8 @@ export default async function CompararPage({
             htmlFor="q"
             className="block text-xs font-bold uppercase tracking-wider text-amauta-text-tertiary mb-1"
           >
-            Agregar fondos {selected.length > 0 && `(${selected.length}/${MAX_FONDOS})`}
+            Agregar fondos{" "}
+            {selected.length > 0 && `(${selected.length}/${MAX_FONDOS})`}
           </label>
           <div className="flex gap-2">
             <input
@@ -146,10 +146,17 @@ export default async function CompararPage({
                       </span>
                       <span className="ml-2 text-xs text-amauta-text-tertiary">
                         {r.categoria ?? "—"} · {r.gestora ?? "—"}
+                        {r.moneda && r.moneda !== "Pesos" && (
+                          <span className="ml-1 text-blue-600 font-semibold">
+                            {r.moneda}
+                          </span>
+                        )}
                       </span>
                     </span>
                     <span className="text-xs text-amauta-text-secondary tabular-nums whitespace-nowrap">
-                      {r.patrimonio ? fmtCompactCurrency(r.patrimonio, "ARS") : "—"}
+                      {r.patrimonio
+                        ? fmtCompactCurrency(r.patrimonio, "ARS")
+                        : "—"}
                     </span>
                   </Link>
                 );
@@ -158,7 +165,7 @@ export default async function CompararPage({
           )}
           {query && searchResults.length === 0 && (
             <p className="mt-3 text-sm text-amauta-text-tertiary">
-              Sin resultados para "{query}".
+              Sin resultados para &quot;{query}&quot;.
             </p>
           )}
         </form>
@@ -189,10 +196,15 @@ export default async function CompararPage({
                         className="px-3 py-3 text-left font-bold min-w-48"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <span>{r.displayName}</span>
+                          <Link
+                            href={`/fondo/${encodeURIComponent(r.key)}`}
+                            className="hover:text-amauta-yellow transition-colors"
+                          >
+                            {r.displayName}
+                          </Link>
                           <Link
                             href={buildRemoveHref(r.key)}
-                            className="text-amauta-yellow hover:text-white text-lg leading-none"
+                            className="text-amauta-yellow hover:text-white text-lg leading-none shrink-0"
                             aria-label={`Quitar ${r.displayName}`}
                           >
                             ×
@@ -203,9 +215,28 @@ export default async function CompararPage({
                   </tr>
                 </thead>
                 <tbody>
-                  <ComparisonRow label="Categoría" rows={selected} get={(r) => r.categoria ?? "—"} />
-                  <ComparisonRow label="Gestora" rows={selected} get={(r) => r.gestora ?? "—"} />
-                  <ComparisonRow label="Horizonte" rows={selected} get={(r) => r.horizonte ?? "—"} />
+                  {/* ── Datos básicos ── */}
+                  <SectionDivider label="Datos generales" colSpan={selected.length + 1} />
+                  <ComparisonRow
+                    label="Categoría"
+                    rows={selected}
+                    get={(r) => r.categoria ?? "—"}
+                  />
+                  <ComparisonRow
+                    label="Gestora"
+                    rows={selected}
+                    get={(r) => r.gestora ?? "—"}
+                  />
+                  <ComparisonRow
+                    label="Horizonte"
+                    rows={selected}
+                    get={(r) => r.horizonte ?? "—"}
+                  />
+                  <ComparisonRow
+                    label="Moneda"
+                    rows={selected}
+                    get={(r) => r.moneda ?? "—"}
+                  />
                   <ComparisonRow
                     label="VCP"
                     rows={selected}
@@ -233,17 +264,72 @@ export default async function CompararPage({
                     rows={selected}
                     get={(r) => fmtDateAr(r.fecha)}
                   />
+
+                  {/* ── Rendimientos ── */}
+                  <SectionDivider label="Rendimientos" colSpan={selected.length + 1} />
+                  <ComparisonReturnRow
+                    label="Rend. 1D"
+                    rows={selected}
+                    get={(r) => r.ret1d}
+                  />
+                  <ComparisonReturnRow
+                    label="Rend. 7D"
+                    rows={selected}
+                    get={(r) => r.ret7d}
+                  />
+                  <ComparisonReturnRow
+                    label="Rend. 30D"
+                    rows={selected}
+                    get={(r) => r.ret30d}
+                  />
+                  <ComparisonReturnRow
+                    label="Rend. 1A"
+                    rows={selected}
+                    get={(r) => r.ret1a}
+                  />
+
+                  {/* ── TNA ── */}
+                  <SectionDivider label="TNA (tasa nominal anual)" colSpan={selected.length + 1} />
+                  <ComparisonReturnRow
+                    label="TNA 1D"
+                    rows={selected}
+                    get={(r) => r.tna1d}
+                  />
+                  <ComparisonReturnRow
+                    label="TNA 30D"
+                    rows={selected}
+                    get={(r) => r.tna30d}
+                  />
+                  <ComparisonReturnRow
+                    label="TNA 1A"
+                    rows={selected}
+                    get={(r) => r.tna1a}
+                  />
                 </tbody>
               </table>
             </div>
             <div className="border-t border-amauta-bg-light bg-amauta-bg-light/30 px-4 py-3 text-xs text-amauta-text-tertiary">
-              Próximamente: gráfico cuotaparte base 100, TNA por ventanas y
-              overlay de benchmarks (BADLAR, MEP, CCL, Merval).
+              Rendimientos calculados sobre VCP de CAFCI · Hacé click en el nombre del fondo para ver la ficha completa
             </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SectionDivider({ label, colSpan }: { label: string; colSpan: number }) {
+  return (
+    <tr className="bg-amauta-bg-light/60">
+      <td
+        colSpan={colSpan}
+        className="px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-widest text-amauta-text-tertiary"
+      >
+        {label}
+      </td>
+    </tr>
   );
 }
 
@@ -271,6 +357,52 @@ function ComparisonRow({
           {get(r)}
         </td>
       ))}
+    </tr>
+  );
+}
+
+function ComparisonReturnRow({
+  label,
+  rows,
+  get,
+}: {
+  label: string;
+  rows: EnrichedRow[];
+  get: (r: EnrichedRow) => number | null;
+}) {
+  // Find best value to highlight winner
+  const values = rows.map(get);
+  const maxVal = values.reduce<number | null>(
+    (best, v) => (v != null && (best == null || v > best) ? v : best),
+    null,
+  );
+
+  return (
+    <tr className="border-t border-amauta-bg-light">
+      <td className="px-3 py-2 font-bold text-amauta-text-tertiary uppercase text-xs">
+        {label}
+      </td>
+      {rows.map((r, i) => {
+        const val = get(r);
+        const fmt = fmtReturn(val, 2);
+        const isBest =
+          maxVal != null && val != null && val === maxVal && values.filter((v) => v === maxVal).length === 1;
+        return (
+          <td
+            key={r.key}
+            className={`px-3 py-2 text-right tabular-nums font-semibold ${fmt.colorClass} ${
+              isBest ? "bg-amauta-yellow/10" : ""
+            }`}
+          >
+            {fmt.text}
+            {isBest && (
+              <span className="ml-1 text-[10px] font-extrabold text-amauta-yellow">
+                ★
+              </span>
+            )}
+          </td>
+        );
+      })}
     </tr>
   );
 }
