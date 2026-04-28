@@ -30,11 +30,12 @@ export const dynamic = "force-dynamic";
 
 type SortKey =
   | "nombre"
-  | "patrimonio_desc"
-  | "vcp_desc"
-  | "ret1d_desc"
-  | "ret30d_desc"
-  | "ret1a_desc";
+  | "nombre_desc"
+  | "patrimonio_desc" | "patrimonio_asc"
+  | "vcp_desc"       | "vcp_asc"
+  | "ret1d_desc"     | "ret1d_asc"
+  | "ret30d_desc"    | "ret30d_asc"
+  | "ret1a_desc"     | "ret1a_asc";
 
 export default async function FondosPage({
   searchParams,
@@ -70,16 +71,23 @@ export default async function FondosPage({
   });
 
   // ── Sort ──
+  // For _desc: nulls go to bottom (treated as -Infinity).
+  // For _asc:  nulls go to bottom (treated as +Infinity).
   const sorted = [...filtered].sort((a, b) => {
-    if (sortKey === "patrimonio_desc") return (b.patrimonio ?? 0) - (a.patrimonio ?? 0);
-    if (sortKey === "vcp_desc") return (b.vcp ?? 0) - (a.vcp ?? 0);
-    if (sortKey === "ret1d_desc")
-      return (b.ret1d ?? -Infinity) - (a.ret1d ?? -Infinity);
-    if (sortKey === "ret30d_desc")
-      return (b.ret30d ?? -Infinity) - (a.ret30d ?? -Infinity);
-    if (sortKey === "ret1a_desc")
-      return (b.ret1a ?? -Infinity) - (a.ret1a ?? -Infinity);
-    return a.displayName.localeCompare(b.displayName, "es-AR");
+    switch (sortKey) {
+      case "patrimonio_desc": return (b.patrimonio ?? 0)         - (a.patrimonio ?? 0);
+      case "patrimonio_asc":  return (a.patrimonio ?? Infinity)  - (b.patrimonio ?? Infinity);
+      case "vcp_desc":        return (b.vcp ?? 0)                - (a.vcp ?? 0);
+      case "vcp_asc":         return (a.vcp ?? Infinity)         - (b.vcp ?? Infinity);
+      case "ret1d_desc":      return (b.ret1d ?? -Infinity)      - (a.ret1d ?? -Infinity);
+      case "ret1d_asc":       return (a.ret1d ?? Infinity)       - (b.ret1d ?? Infinity);
+      case "ret30d_desc":     return (b.ret30d ?? -Infinity)     - (a.ret30d ?? -Infinity);
+      case "ret30d_asc":      return (a.ret30d ?? Infinity)      - (b.ret30d ?? Infinity);
+      case "ret1a_desc":      return (b.ret1a ?? -Infinity)      - (a.ret1a ?? -Infinity);
+      case "ret1a_asc":       return (a.ret1a ?? Infinity)       - (b.ret1a ?? Infinity);
+      case "nombre_desc":     return b.displayName.localeCompare(a.displayName, "es-AR");
+      default:                return a.displayName.localeCompare(b.displayName, "es-AR");
+    }
   });
 
   // ── Paginate ──
@@ -207,7 +215,7 @@ export default async function FondosPage({
                   <th className="px-3 py-3 text-left font-bold">#</th>
                   <SortableHeader
                     label="Fondo / Clase"
-                    sortKey="nombre"
+                    baseKey="nombre"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="left"
@@ -217,35 +225,35 @@ export default async function FondosPage({
                   <th className="px-3 py-3 text-left font-bold">Moneda</th>
                   <SortableHeader
                     label="VCP"
-                    sortKey="vcp_desc"
+                    baseKey="vcp"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
                   />
                   <SortableHeader
                     label="Patrimonio"
-                    sortKey="patrimonio_desc"
+                    baseKey="patrimonio"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. 1D ↕"
-                    sortKey="ret1d_desc"
+                    label="Rend. 1D"
+                    baseKey="ret1d"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. 30D ↕"
-                    sortKey="ret30d_desc"
+                    label="Rend. 30D"
+                    baseKey="ret30d"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. 1A ↕"
-                    sortKey="ret1a_desc"
+                    label="Rend. 1A"
+                    baseKey="ret1a"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
@@ -420,30 +428,41 @@ function SelectFilter({
 
 function SortableHeader({
   label,
-  sortKey,
+  baseKey,
   activeSort,
   buildHref,
   align = "left",
 }: {
   label: string;
-  sortKey: SortKey;
+  /** Column base name, e.g. "ret1d" — the component appends _desc / _asc */
+  baseKey: string;
   activeSort: SortKey;
   buildHref: (overrides: Partial<SearchParams>) => string;
   align?: "left" | "right";
 }) {
-  const isActive = activeSort === sortKey;
+  const isDesc = activeSort === `${baseKey}_desc`;
+  const isAsc  = activeSort === `${baseKey}_asc` || activeSort === baseKey;
+  const isActive = isDesc || isAsc;
+
+  // Toggle: inactive or asc → desc first click; desc → asc second click
+  const nextSort = isDesc
+    ? (`${baseKey}_asc` as SortKey)
+    : (`${baseKey}_desc` as SortKey);
+
   return (
     <th
       className={`px-3 py-3 ${align === "right" ? "text-right" : "text-left"} font-bold`}
     >
       <Link
-        href={buildHref({ sort: sortKey, page: "1" })}
+        href={buildHref({ sort: nextSort, page: "1" })}
         className={`inline-flex items-center gap-1 hover:text-amauta-yellow transition-colors ${
           isActive ? "text-amauta-yellow" : ""
         }`}
       >
-        {/* Strip the ↕ hint when active (replaced by ↓) */}
-        {label.replace(" ↕", "")} {isActive ? <span aria-hidden>↓</span> : null}
+        {label}
+        {isDesc && <span aria-hidden>↓</span>}
+        {isAsc  && <span aria-hidden>↑</span>}
+        {!isActive && <span aria-hidden className="opacity-30 text-xs">↕</span>}
       </Link>
     </th>
   );
