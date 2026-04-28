@@ -13,11 +13,11 @@ const TOP_N = 10;
 
 type Periodo = "1d" | "7d" | "30d" | "1a";
 
-const PERIODOS: { key: Periodo; label: string; field: keyof EnrichedRow }[] = [
-  { key: "1d", label: "Diario (1D)", field: "ret1d" },
-  { key: "7d", label: "Semanal (7D)", field: "ret7d" },
-  { key: "30d", label: "Mensual (30D)", field: "ret30d" },
-  { key: "1a", label: "Interanual (1A)", field: "ret1a" },
+const PERIODOS: { key: Periodo; label: string; field: keyof EnrichedRow; outlierThreshold: number }[] = [
+  { key: "1d",  label: "Diario (1D)",       field: "ret1d",  outlierThreshold: 5   },
+  { key: "7d",  label: "Semanal (7D)",      field: "ret7d",  outlierThreshold: 15  },
+  { key: "30d", label: "Mensual (30D)",     field: "ret30d", outlierThreshold: 35  },
+  { key: "1a",  label: "Interanual (1A)",   field: "ret1a",  outlierThreshold: 150 },
 ];
 
 interface SearchParams {
@@ -175,14 +175,16 @@ export default async function RankingsPage({
                 group={g}
                 getReturn={getReturn}
                 periodoLabel={periodoConfig.label}
+                outlierThreshold={periodoConfig.outlierThreshold}
               />
             ))}
           </div>
         )}
 
         <p className="mt-6 text-xs text-amauta-text-tertiary">
-          Rendimientos calculados sobre VCP (Valor Cuotaparte) de CAFCI.
-          Próximamente: ratio de Sharpe, volatilidad, rentabilidad real ajustada por IPC.
+          Rendimientos calculados sobre VCP de CAFCI ·{" "}
+          <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos
+          (corrección de VCP o distribución), verificar en CAFCI
         </p>
       </div>
     </div>
@@ -193,6 +195,7 @@ function CategoryCard({
   group,
   getReturn,
   periodoLabel,
+  outlierThreshold,
 }: {
   group: {
     categoria: string;
@@ -202,6 +205,7 @@ function CategoryCard({
   };
   getReturn: (r: EnrichedRow) => number | null;
   periodoLabel: string;
+  outlierThreshold: number;
 }) {
   const catSlug = encodeURIComponent(group.categoria);
   return (
@@ -233,7 +237,7 @@ function CategoryCard({
         <tbody>
           {group.top.map((r, i) => {
             const ret = getReturn(r);
-            const retFmt = fmtReturn(ret, 2);
+            const retFmt = fmtReturn(ret, 2, outlierThreshold);
             return (
               <tr
                 key={r.key}
@@ -260,6 +264,7 @@ function CategoryCard({
                 </td>
                 <td
                   className={`px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold ${retFmt.colorClass}`}
+                  title={retFmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
                 >
                   {retFmt.text}
                 </td>

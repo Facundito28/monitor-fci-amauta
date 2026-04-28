@@ -46,22 +46,30 @@ export function fmtCompactCurrency(
 
 /**
  * Format a return/TNA value as a signed percentage.
- * Returns { text, colorClass } for use in JSX.
+ * Returns { text, colorClass, isOutlier } for use in JSX.
+ *
+ * outlierThreshold: if |value| exceeds this, the value is flagged as a
+ * probable data artefact (VCP correction / distribution event) with amber
+ * colouring and a ⚠ suffix. Suggested thresholds: 1D→5, 30D→35, 1A→150.
  */
 export function fmtReturn(
   value: number | null | undefined,
   decimals = 2,
-): { text: string; colorClass: string } {
+  outlierThreshold?: number,
+): { text: string; colorClass: string; isOutlier: boolean } {
   if (value == null || isNaN(value)) {
-    return { text: "—", colorClass: "text-amauta-text-tertiary" };
+    return { text: "—", colorClass: "text-amauta-text-tertiary", isOutlier: false };
   }
+  const isOutlier = outlierThreshold != null && Math.abs(value) > outlierThreshold;
   const sign = value >= 0 ? "+" : "";
-  const text = `${sign}${fmtNumber(value, decimals)}%`;
-  const colorClass =
-    value > 0
+  const base = `${sign}${fmtNumber(value, decimals)}%`;
+  const text = isOutlier ? `${base} ⚠` : base;
+  const colorClass = isOutlier
+    ? "text-amber-500 font-semibold"
+    : value > 0
       ? "text-emerald-600 font-semibold"
       : value < 0
         ? "text-red-600 font-semibold"
         : "text-amauta-text-secondary";
-  return { text, colorClass };
+  return { text, colorClass, isOutlier };
 }

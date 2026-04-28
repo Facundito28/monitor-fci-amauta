@@ -272,9 +272,9 @@ export default async function FondosPage({
                   </tr>
                 ) : (
                   pageRows.map((r, i) => {
-                    const ret1d = fmtReturn(r.ret1d, 2);
-                    const ret30d = fmtReturn(r.ret30d, 2);
-                    const ret1a = fmtReturn(r.ret1a, 2);
+                    const ret1d  = fmtReturn(r.ret1d,  2, 5);   // >±5% en 1D → outlier
+                    const ret30d = fmtReturn(r.ret30d, 2, 35);  // >±35% en 30D → outlier
+                    const ret1a  = fmtReturn(r.ret1a,  2, 150); // >±150% en 1A → outlier
                     const isUsd = r.moneda === "USD";
                     return (
                       <tr
@@ -323,16 +323,19 @@ export default async function FondosPage({
                         </td>
                         <td
                           className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret1d.colorClass}`}
+                          title={ret1d.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
                         >
                           {ret1d.text}
                         </td>
                         <td
                           className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret30d.colorClass}`}
+                          title={ret30d.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
                         >
                           {ret30d.text}
                         </td>
                         <td
                           className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret1a.colorClass}`}
+                          title={ret1a.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
                         >
                           {ret1a.text}
                         </td>
@@ -378,8 +381,10 @@ export default async function FondosPage({
         </div>
 
         <p className="mt-4 text-xs text-amauta-text-tertiary">
-          Rend. 1D / 30D / 1A = rendimiento simple del período (igual a CAFCI).
-          Hacé click en ↕ para ordenar. Hacé click en el nombre para ver la ficha completa.
+          Rend. 1D / 30D / 1A = rendimiento simple del período (igual a CAFCI) ·
+          Hacé click en ↕ para ordenar · Hacé click en el nombre para ver la ficha completa ·{" "}
+          <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos
+          (corrección de VCP o distribución), verificar en CAFCI
         </p>
       </div>
     </div>

@@ -271,21 +271,25 @@ export default async function CompararPage({
                     label="Rend. 1D"
                     rows={selected}
                     get={(r) => r.ret1d}
+                    outlierThreshold={5}
                   />
                   <ComparisonReturnRow
                     label="Rend. 7D"
                     rows={selected}
                     get={(r) => r.ret7d}
+                    outlierThreshold={15}
                   />
                   <ComparisonReturnRow
                     label="Rend. 30D"
                     rows={selected}
                     get={(r) => r.ret30d}
+                    outlierThreshold={35}
                   />
                   <ComparisonReturnRow
                     label="Rend. 1A"
                     rows={selected}
                     get={(r) => r.ret1a}
+                    outlierThreshold={150}
                   />
 
                   {/* ── TNA ── */}
@@ -309,7 +313,8 @@ export default async function CompararPage({
               </table>
             </div>
             <div className="border-t border-amauta-bg-light bg-amauta-bg-light/30 px-4 py-3 text-xs text-amauta-text-tertiary">
-              Rendimientos calculados sobre VCP de CAFCI · Hacé click en el nombre del fondo para ver la ficha completa
+              Rendimientos calculados sobre VCP de CAFCI · Hacé click en el nombre del fondo para ver la ficha completa ·{" "}
+              <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos, verificar en CAFCI
             </div>
           </div>
         )}
@@ -365,10 +370,12 @@ function ComparisonReturnRow({
   label,
   rows,
   get,
+  outlierThreshold,
 }: {
   label: string;
   rows: EnrichedRow[];
   get: (r: EnrichedRow) => number | null;
+  outlierThreshold?: number;
 }) {
   // Find best value to highlight winner
   const values = rows.map(get);
@@ -382,9 +389,9 @@ function ComparisonReturnRow({
       <td className="px-3 py-2 font-bold text-amauta-text-tertiary uppercase text-xs">
         {label}
       </td>
-      {rows.map((r, i) => {
+      {rows.map((r) => {
         const val = get(r);
-        const fmt = fmtReturn(val, 2);
+        const fmt = fmtReturn(val, 2, outlierThreshold);
         const isBest =
           maxVal != null && val != null && val === maxVal && values.filter((v) => v === maxVal).length === 1;
         return (
@@ -393,9 +400,10 @@ function ComparisonReturnRow({
             className={`px-3 py-2 text-right tabular-nums font-semibold ${fmt.colorClass} ${
               isBest ? "bg-amauta-yellow/10" : ""
             }`}
+            title={fmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
           >
             {fmt.text}
-            {isBest && (
+            {isBest && !fmt.isOutlier && (
               <span className="ml-1 text-[10px] font-extrabold text-amauta-yellow">
                 ★
               </span>
