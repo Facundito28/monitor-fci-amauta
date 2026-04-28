@@ -11,6 +11,7 @@
  * - `limit=0` returns all rows (CAFCI convention).
  */
 import type {
+  CarteraRow,
   CafciResponse,
   DailyStatRow,
   Entidad,
@@ -178,4 +179,68 @@ export function parseCafciDate(s: string): string | null {
   // CAFCI dates are post-2000.
   const yyyy = 2000 + yy;
   return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Subtract N calendar days from an ISO YYYY-MM-DD date string. */
+export function subtractDays(isoDate: string, days: number): string {
+  const d = new Date(isoDate + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Build a displayName→vcp map for all fund classes on a specific date.
+ * Accepts a pre-fetched tipos list to avoid redundant API calls.
+ */
+export async function buildVcpMapForDate(
+  tipos: TipoRenta[],
+  fecha: string,
+): Promise<Map<string, number>> {
+  const lists = await Promise.all(
+    tipos.map((t) => getDailyStatsByCategory(t.id, fecha)),
+  );
+  const map = new Map<string, number>();
+  for (const list of lists) {
+    for (const row of list) {
+      if (typeof row.vcp === "number") map.set(row.fondo, row.vcp);
+    }
+  }
+  return map;
+}
+
+/**
+ * Fetch full DailyStatRows for all categories on a specific date.
+ * Accepts a pre-fetched tipos list to avoid redundant API calls.
+ */
+export async function getAllStatsByDate(
+  tipos: TipoRenta[],
+  fecha: string,
+): Promise<DailyStatRow[]> {
+  const lists = await Promise.all(
+    tipos.map((t) => getDailyStatsByCategory(t.id, fecha)),
+  );
+  const rows: DailyStatRow[] = [];
+  for (const list of lists) rows.push(...list);
+  return rows;
+}
+
+/**
+ * Portfolio composition (cartera) for all classes in a category on a date.
+ * Returns empty array if the endpoint is unavailable or returns no data.
+ */
+export async function getCarteraByCategory(
+  tipoRentaId: string | number,
+  fecha: string,
+): Promise<CarteraRow[]> {
+  try {
+    const data = await cafciGet<CarteraRow[]>(
+      `/estadisticas/informacion/cartera/${tipoRentaId}/${fecha}`,
+    );
+    if (!Array.isArray(data)) return [];
+    return data.filter(
+      (r) => r && typeof r.fondo === "string" && typeof r.nombreActivo === "string",
+    );
+  } catch {
+    return [];
+  }
 }

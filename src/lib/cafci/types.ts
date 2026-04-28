@@ -58,6 +58,22 @@ export interface LatestSnapshot {
 }
 
 /**
+ * One row of the cartera (portfolio composition) endpoint.
+ * GET /estadisticas/informacion/cartera/{tipoRentaId}/{fecha}
+ * Each row represents one holding in one fund class on that date.
+ */
+export interface CarteraRow {
+  /** Fund class display name — matches DailyStatRow.fondo */
+  fondo: string;
+  /** Asset / security name */
+  nombreActivo: string;
+  /** Asset type label (e.g. "Tasa CER ARS", "Otros", "Acciones") */
+  tipoActivo?: string;
+  /** Portfolio weight as percentage (0-100) */
+  porcentaje: number;
+}
+
+/**
  * Fondo as returned by /fondo?include=tipoRenta
  * Foreign key IDs come as strings.
  */

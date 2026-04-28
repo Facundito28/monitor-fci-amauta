@@ -2,17 +2,23 @@
  * Joins the static fondo catalog with the latest daily snapshot to produce
  * a single enriched row per fund class — the unit our UI works with.
  *
- * Each daily-stat row's `fondo` field is the CLASS display name
- * ("Fondo X - Clase A"), so we strip that suffix and look up the parent
- * fondo to recover gestora and category.
+ * getMarketSnapshot()            → fast, no returns (home, comparar).
+ * getMarketSnapshotWithReturns() → full, with 1D/7D/30D/1A TNA (fondos, rankings).
  */
 import {
+  buildVcpMapForDate,
   fondoBaseName,
+  getAllStatsByDate,
+  getCarteraByCategory,
   getFondosActivos,
   getGestoraMap,
-  getLatestSnapshot,
+  getLatestBusinessDate,
+  getTiposRenta,
+  subtractDays,
 } from "./client";
-import type { DailyStatRow, Fondo } from "./types";
+import type { CarteraRow, DailyStatRow, Fondo } from "./types";
+
+export type { CarteraRow };
 
 export interface EnrichedRow {
   /** Unique key = CAFCI display name. */
@@ -23,6 +29,8 @@ export interface EnrichedRow {
   baseName: string;
   /** Parent fondo id (string), null if no match found. */
   fondoId: string | null;
+  /** tipoRentaId — needed for composition lookups. */
+  tipoRentaId: string | null;
   /** Category name like "Renta Fija", "Mercado de Dinero". */
   categoria: string | null;
   /** Sociedad gerente short name. */
@@ -37,30 +45,122 @@ export interface EnrichedRow {
   ccp: number | null;
   /** AUM in pesos. */
   patrimonio: number | null;
+
+  // ── Rendimientos ────────────────────────────────────────────────────
+  /** Simple return 1 business day (%). null = prior data unavailable. */
+  ret1d: number | null;
+  /** Simple return ~7 calendar days (%). */
+  ret7d: number | null;
+  /** Simple return ~30 calendar days (%). */
+  ret30d: number | null;
+  /** Simple return ~365 calendar days (%). */
+  ret1a: number | null;
+  /** TNA annualised from 1D (%). */
+  tna1d: number | null;
+  /** TNA annualised from 30D (%). */
+  tna30d: number | null;
+  /** TNA annualised from 1A (%). */
+  tna1a: number | null;
 }
 
 export interface MarketSnapshot {
-  /** ISO YYYY-MM-DD of the snapshot. */
   fecha: string;
-  /** All enriched per-class rows. */
   rows: EnrichedRow[];
-  /** Distinct categorías present. */
   categorias: string[];
-  /** Distinct gestoras present. */
   gestoras: string[];
-  /** Aggregate AUM across all rows. */
   aumTotal: number;
+  /** True when return columns (ret*, tna*) have been populated. */
+  hasReturns: boolean;
 }
 
-/**
- * Fetches everything needed for the listings view in one shot and joins.
- * Cached at the request level (Next.js fetch dedup).
- */
-export async function getMarketSnapshot(): Promise<MarketSnapshot> {
-  const [snapshot, fondos, gestoraMap] = await Promise.all([
-    getLatestSnapshot(),
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function computeReturn(vcpNow: number, vcpThen: number | undefined): number | null {
+  if (!vcpThen || vcpThen === 0) return null;
+  return ((vcpNow / vcpThen) - 1) * 100;
+}
+
+function annualise(ret: number | null, days: number): number | null {
+  if (ret == null) return null;
+  return ret * (365 / days);
+}
+
+function buildEnrichedRow(
+  stat: DailyStatRow,
+  fecha: string,
+  fondosByLowerName: Map<string, Fondo>,
+  gestoraMap: Map<string, string>,
+  vcpD1: Map<string, number> | null,
+  vcpD7: Map<string, number> | null,
+  vcpD30: Map<string, number> | null,
+  vcpD365: Map<string, number> | null,
+): EnrichedRow {
+  const baseName = fondoBaseName(stat.fondo);
+  const parent = fondosByLowerName.get(baseName.toLowerCase().trim());
+  const categoria =
+    parent?.tipoRenta?.nombre ?? parent?.clasificacionVieja ?? null;
+  const gestora = parent?.sociedadGerenteId
+    ? gestoraMap.get(String(parent.sociedadGerenteId)) ?? null
+    : null;
+  const horizonte =
+    parent?.horizonteViejo ?? horizonteFromCode(stat.horizonte);
+  const patrimonio = typeof stat.patrimonio === "number" ? stat.patrimonio : null;
+  const ccp = typeof stat.ccp === "number" ? stat.ccp : null;
+
+  const key = stat.fondo;
+  const vcpNow = stat.vcp;
+
+  const ret1d = vcpD1 ? computeReturn(vcpNow, vcpD1.get(key)) : null;
+  const ret7d = vcpD7 ? computeReturn(vcpNow, vcpD7.get(key)) : null;
+  const ret30d = vcpD30 ? computeReturn(vcpNow, vcpD30.get(key)) : null;
+  const ret1a = vcpD365 ? computeReturn(vcpNow, vcpD365.get(key)) : null;
+
+  return {
+    key,
+    displayName: stat.fondo,
+    baseName,
+    fondoId: parent?.id ?? null,
+    tipoRentaId: parent?.tipoRentaId ?? null,
+    categoria,
+    gestora,
+    horizonte,
+    fecha,
+    vcp: vcpNow,
+    ccp,
+    patrimonio,
+    ret1d,
+    ret7d,
+    ret30d,
+    ret1a,
+    tna1d: annualise(ret1d, 1),
+    tna30d: annualise(ret30d, 30),
+    tna1a: annualise(ret1a, 365),
+  };
+}
+
+// ─── Core snapshot builder ───────────────────────────────────────────────────
+
+async function _buildSnapshot(withReturns: boolean): Promise<MarketSnapshot> {
+  const [fondos, gestoraMap, tipos, latestFecha] = await Promise.all([
     getFondosActivos(),
     getGestoraMap(),
+    getTiposRenta(),
+    getLatestBusinessDate(),
+  ]);
+
+  const d1 = subtractDays(latestFecha, 1);
+  const d7 = subtractDays(latestFecha, 7);
+  const d30 = subtractDays(latestFecha, 30);
+  const d365 = subtractDays(latestFecha, 365);
+
+  const nullMap = Promise.resolve(null as Map<string, number> | null);
+
+  const [todayStats, vcpD1, vcpD7, vcpD30, vcpD365] = await Promise.all([
+    getAllStatsByDate(tipos, latestFecha),
+    withReturns ? buildVcpMapForDate(tipos, d1) : nullMap,
+    withReturns ? buildVcpMapForDate(tipos, d7) : nullMap,
+    withReturns ? buildVcpMapForDate(tipos, d30) : nullMap,
+    withReturns ? buildVcpMapForDate(tipos, d365) : nullMap,
   ]);
 
   const fondosByLowerName = new Map<string, Fondo>();
@@ -73,48 +173,69 @@ export async function getMarketSnapshot(): Promise<MarketSnapshot> {
   const gestorasSet = new Set<string>();
   let aumTotal = 0;
 
-  for (const stat of snapshot.rows) {
-    const baseName = fondoBaseName(stat.fondo);
-    const parent = fondosByLowerName.get(baseName.toLowerCase().trim());
-    const categoria =
-      parent?.tipoRenta?.nombre ??
-      parent?.clasificacionVieja ??
-      null;
-    const gestora = parent?.sociedadGerenteId
-      ? gestoraMap.get(String(parent.sociedadGerenteId)) ?? null
-      : null;
-    const horizonte = parent?.horizonteViejo ?? horizonteFromCode(stat.horizonte);
-
-    const patrimonio =
-      typeof stat.patrimonio === "number" ? stat.patrimonio : null;
-    const ccp = typeof stat.ccp === "number" ? stat.ccp : null;
-
-    if (categoria) categoriasSet.add(categoria);
-    if (gestora) gestorasSet.add(gestora);
-    if (patrimonio) aumTotal += patrimonio;
-
-    rows.push({
-      key: stat.fondo,
-      displayName: stat.fondo,
-      baseName,
-      fondoId: parent?.id ?? null,
-      categoria,
-      gestora,
-      horizonte,
-      fecha: snapshot.fecha,
-      vcp: stat.vcp,
-      ccp,
-      patrimonio,
-    });
+  for (const stat of todayStats) {
+    const row = buildEnrichedRow(
+      stat,
+      latestFecha,
+      fondosByLowerName,
+      gestoraMap,
+      vcpD1,
+      vcpD7,
+      vcpD30,
+      vcpD365,
+    );
+    if (row.categoria) categoriasSet.add(row.categoria);
+    if (row.gestora) gestorasSet.add(row.gestora);
+    if (row.patrimonio) aumTotal += row.patrimonio;
+    rows.push(row);
   }
 
   return {
-    fecha: snapshot.fecha,
+    fecha: latestFecha,
     rows,
     categorias: Array.from(categoriasSet).sort(),
     gestoras: Array.from(gestorasSet).sort(),
     aumTotal,
+    hasReturns: withReturns,
   };
+}
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+/** Fast snapshot — no return computation. Used in home + comparar. */
+export async function getMarketSnapshot(): Promise<MarketSnapshot> {
+  return _buildSnapshot(false);
+}
+
+/**
+ * Full snapshot WITH return computation (1D, 7D, 30D, 1A).
+ * Fetches prior-date VCP data in parallel; adds ~1–2 s latency.
+ * Used in /fondos and /rankings.
+ */
+export async function getMarketSnapshotWithReturns(): Promise<MarketSnapshot> {
+  return _buildSnapshot(true);
+}
+
+/**
+ * Fetch portfolio composition for a specific fund class from CAFCI.
+ * Returns null if the data is unavailable (endpoint not responding or
+ * the fund has no cartera data for that date).
+ */
+export async function getFondoComposicion(
+  displayName: string,
+  tipoRentaId: string | null,
+  fecha: string,
+): Promise<CarteraRow[] | null> {
+  if (!tipoRentaId) return null;
+  try {
+    const rows = await getCarteraByCategory(tipoRentaId, fecha);
+    const filtered = rows.filter(
+      (r) => r.fondo.toLowerCase() === displayName.toLowerCase(),
+    );
+    return filtered.length > 0 ? filtered.sort((a, b) => b.porcentaje - a.porcentaje) : null;
+  } catch {
+    return null;
+  }
 }
 
 function horizonteFromCode(code: string | undefined): string | null {

@@ -1,12 +1,12 @@
-/**
- * Listado completo de FCIs (clases) con VCP y patrimonio del último cierre.
+﻿/**
+ * Listado completo de FCIs (clases) con VCP, patrimonio y rendimientos.
  *
  * Filtros sincronizados con la URL (permalinks compartibles).
- * Datos: CAFCI live (snapshot diario más reciente).
+ * Datos: CAFCI live con cálculo de TNA 1D y 30D.
  */
 import Link from "next/link";
-import { fmtCompactCurrency, fmtNumber } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
+import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
 
 const PAGE_SIZE = 50;
 
@@ -22,12 +22,12 @@ interface SearchParams {
 export const metadata = {
   title: "Fondos · Monitor FCIs · Amauta",
   description:
-    "Listado completo de Fondos Comunes de Inversión argentinos con VCP, patrimonio y filtros por categoría, gestora y horizonte.",
+    "Listado completo de Fondos Comunes de Inversión argentinos con VCP, patrimonio, rendimiento diario y mensual.",
 };
 
 export const dynamic = "force-dynamic";
 
-type SortKey = "nombre" | "patrimonio_desc" | "vcp_desc";
+type SortKey = "nombre" | "patrimonio_desc" | "vcp_desc" | "ret1d_desc" | "ret30d_desc" | "ret1a_desc";
 
 export default async function FondosPage({
   searchParams,
@@ -42,7 +42,7 @@ export default async function FondosPage({
   const sortKey: SortKey = ((sp.sort as SortKey) ?? "patrimonio_desc");
   const page = Math.max(1, Number(sp.page) || 1);
 
-  const snap = await getMarketSnapshot().catch(() => null);
+  const snap = await getMarketSnapshotWithReturns().catch(() => null);
 
   if (!snap) {
     return (
@@ -62,9 +62,11 @@ export default async function FondosPage({
 
   // Sort
   const sorted = [...filtered].sort((a, b) => {
-    if (sortKey === "patrimonio_desc")
-      return (b.patrimonio ?? 0) - (a.patrimonio ?? 0);
+    if (sortKey === "patrimonio_desc") return (b.patrimonio ?? 0) - (a.patrimonio ?? 0);
     if (sortKey === "vcp_desc") return (b.vcp ?? 0) - (a.vcp ?? 0);
+    if (sortKey === "ret1d_desc") return (b.ret1d ?? -Infinity) - (a.ret1d ?? -Infinity);
+    if (sortKey === "ret30d_desc") return (b.ret30d ?? -Infinity) - (a.ret30d ?? -Infinity);
+    if (sortKey === "ret1a_desc") return (b.ret1a ?? -Infinity) - (a.ret1a ?? -Infinity);
     return a.displayName.localeCompare(b.displayName, "es-AR");
   });
 
@@ -89,14 +91,12 @@ export default async function FondosPage({
     for (const [k, v] of Object.entries(merged)) {
       if (v) params.set(k, v);
     }
-    if (!params.get("page") || params.get("page") === "1")
-      params.delete("page");
+    if (!params.get("page") || params.get("page") === "1") params.delete("page");
     if (params.get("sort") === "patrimonio_desc") params.delete("sort");
     const qs = params.toString();
     return qs ? `/fondos?${qs}` : "/fondos";
   };
 
-  // Distinct horizons
   const horizonteOpts = ["Corto Plazo", "Mediano Plazo", "Largo Plazo"];
 
   return (
@@ -136,25 +136,9 @@ export default async function FondosPage({
               className="w-full rounded-md border border-amauta-bg-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-amauta-yellow focus:ring-2 focus:ring-amauta-yellow/30"
             />
           </div>
-          <SelectFilter
-            id="cat"
-            label="Categoría"
-            value={catFilter}
-            options={snap.categorias}
-          />
-          <SelectFilter
-            id="gestora"
-            label="Gestora"
-            value={gestoraFilter}
-            options={snap.gestoras}
-          />
-          <SelectFilter
-            id="horizonte"
-            label="Horizonte"
-            value={horizonteFilter}
-            options={horizonteOpts}
-          />
-          {/* Hidden state preservers */}
+          <SelectFilter id="cat" label="Categoría" value={catFilter} options={snap.categorias} />
+          <SelectFilter id="gestora" label="Gestora" value={gestoraFilter} options={snap.gestoras} />
+          <SelectFilter id="horizonte" label="Horizonte" value={horizonteFilter} options={horizonteOpts} />
           <input type="hidden" name="sort" value={sortKey} />
           <div className="flex gap-2 md:col-span-4">
             <button
@@ -181,73 +165,68 @@ export default async function FondosPage({
               <thead className="bg-amauta-dark text-white">
                 <tr>
                   <th className="px-3 py-3 text-left font-bold">#</th>
-                  <SortableHeader
-                    label="Fondo / Clase"
-                    sortKey="nombre"
-                    activeSort={sortKey}
-                    buildHref={buildHref}
-                    align="left"
-                  />
+                  <SortableHeader label="Fondo / Clase" sortKey="nombre" activeSort={sortKey} buildHref={buildHref} align="left" />
                   <th className="px-3 py-3 text-left font-bold">Categoría</th>
                   <th className="px-3 py-3 text-left font-bold">Gestora</th>
-                  <SortableHeader
-                    label="VCP"
-                    sortKey="vcp_desc"
-                    activeSort={sortKey}
-                    buildHref={buildHref}
-                    align="right"
-                  />
-                  <SortableHeader
-                    label="Patrimonio"
-                    sortKey="patrimonio_desc"
-                    activeSort={sortKey}
-                    buildHref={buildHref}
-                    align="right"
-                  />
-                  <th className="px-3 py-3 text-left font-bold">Horizonte</th>
+                  <SortableHeader label="VCP" sortKey="vcp_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
+                  <SortableHeader label="Patrimonio" sortKey="patrimonio_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
+                  <SortableHeader label="TNA 1D" sortKey="ret1d_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
+                  <SortableHeader label="Rend. 30D" sortKey="ret30d_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
+                  <SortableHeader label="Rend. 1A" sortKey="ret1a_desc" activeSort={sortKey} buildHref={buildHref} align="right" />
                 </tr>
               </thead>
               <tbody>
                 {pageRows.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-12 text-center text-amauta-text-secondary"
-                    >
+                    <td colSpan={9} className="px-4 py-12 text-center text-amauta-text-secondary">
                       No se encontraron fondos con esos filtros.
                     </td>
                   </tr>
                 ) : (
-                  pageRows.map((r, i) => (
-                    <tr
-                      key={r.key}
-                      className="border-t border-amauta-bg-light hover:bg-amauta-bg-light/50"
-                    >
-                      <td className="px-3 py-3 text-amauta-text-tertiary tabular-nums">
-                        {start + i + 1}
-                      </td>
-                      <td className="px-3 py-3 font-medium text-amauta-bordo">
-                        {r.displayName}
-                      </td>
-                      <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
-                        {r.categoria ?? "—"}
-                      </td>
-                      <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
-                        {r.gestora ?? "—"}
-                      </td>
-                      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
-                        {fmtNumber(r.vcp, 4)}
-                      </td>
-                      <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
-                        {r.patrimonio
-                          ? fmtCompactCurrency(r.patrimonio, "ARS")
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
-                        {r.horizonte ?? "—"}
-                      </td>
-                    </tr>
-                  ))
+                  pageRows.map((r, i) => {
+                    const tna1d = fmtReturn(r.tna1d, 2);
+                    const ret30d = fmtReturn(r.ret30d, 2);
+                    const ret1a = fmtReturn(r.ret1a, 2);
+                    return (
+                      <tr
+                        key={r.key}
+                        className="border-t border-amauta-bg-light hover:bg-amauta-bg-light/50"
+                      >
+                        <td className="px-3 py-3 text-amauta-text-tertiary tabular-nums">
+                          {start + i + 1}
+                        </td>
+                        <td className="px-3 py-3 font-medium text-amauta-bordo">
+                          <Link
+                            href={`/fondo/${encodeURIComponent(r.key)}`}
+                            className="hover:underline"
+                          >
+                            {r.displayName}
+                          </Link>
+                        </td>
+                        <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
+                          {r.categoria ?? "—"}
+                        </td>
+                        <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
+                          {r.gestora ?? "—"}
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+                          {fmtNumber(r.vcp, 4)}
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums whitespace-nowrap">
+                          {r.patrimonio ? fmtCompactCurrency(r.patrimonio, "ARS") : "—"}
+                        </td>
+                        <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${tna1d.colorClass}`}>
+                          {tna1d.text}
+                        </td>
+                        <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret30d.colorClass}`}>
+                          {ret30d.text}
+                        </td>
+                        <td className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret1a.colorClass}`}>
+                          {ret1a.text}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -260,34 +239,18 @@ export default async function FondosPage({
                 Página {safePage} de {totalPages}
               </span>
               <div className="flex gap-1">
-                <PageLink href={buildHref({ page: "1" })} disabled={safePage === 1}>
-                  «
-                </PageLink>
-                <PageLink
-                  href={buildHref({ page: String(safePage - 1) })}
-                  disabled={safePage === 1}
-                >
-                  ‹
-                </PageLink>
-                <PageLink
-                  href={buildHref({ page: String(safePage + 1) })}
-                  disabled={safePage === totalPages}
-                >
-                  ›
-                </PageLink>
-                <PageLink
-                  href={buildHref({ page: String(totalPages) })}
-                  disabled={safePage === totalPages}
-                >
-                  »
-                </PageLink>
+                <PageLink href={buildHref({ page: "1" })} disabled={safePage === 1}>«</PageLink>
+                <PageLink href={buildHref({ page: String(safePage - 1) })} disabled={safePage === 1}>‹</PageLink>
+                <PageLink href={buildHref({ page: String(safePage + 1) })} disabled={safePage === totalPages}>›</PageLink>
+                <PageLink href={buildHref({ page: String(totalPages) })} disabled={safePage === totalPages}>»</PageLink>
               </div>
             </div>
           )}
         </div>
 
         <p className="mt-4 text-xs text-amauta-text-tertiary">
-          Próximamente: TIR del día (TNA) calculada sobre el cierre anterior, ventanas custom y exportación CSV.
+          TNA 1D = rendimiento diario anualizado. Rend. 30D / 1A = retorno simple del período.
+          Próximamente: ventanas custom y exportación CSV.
         </p>
       </div>
     </div>
@@ -295,22 +258,13 @@ export default async function FondosPage({
 }
 
 function SelectFilter({
-  id,
-  label,
-  value,
-  options,
+  id, label, value, options,
 }: {
-  id: string;
-  label: string;
-  value: string;
-  options: string[];
+  id: string; label: string; value: string; options: string[];
 }) {
   return (
     <div>
-      <label
-        htmlFor={id}
-        className="block text-xs font-bold uppercase tracking-wider text-amauta-text-tertiary mb-1"
-      >
+      <label htmlFor={id} className="block text-xs font-bold uppercase tracking-wider text-amauta-text-tertiary mb-1">
         {label}
       </label>
       <select
@@ -321,9 +275,7 @@ function SelectFilter({
       >
         <option value="">Todas</option>
         {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
+          <option key={o} value={o}>{o}</option>
         ))}
       </select>
     </div>
@@ -331,11 +283,7 @@ function SelectFilter({
 }
 
 function SortableHeader({
-  label,
-  sortKey,
-  activeSort,
-  buildHref,
-  align = "left",
+  label, sortKey, activeSort, buildHref, align = "left",
 }: {
   label: string;
   sortKey: SortKey;
@@ -348,9 +296,7 @@ function SortableHeader({
     <th className={`px-3 py-3 ${align === "right" ? "text-right" : "text-left"} font-bold`}>
       <Link
         href={buildHref({ sort: sortKey, page: "1" })}
-        className={`inline-flex items-center gap-1 hover:text-amauta-yellow transition-colors ${
-          isActive ? "text-amauta-yellow" : ""
-        }`}
+        className={`inline-flex items-center gap-1 hover:text-amauta-yellow transition-colors ${isActive ? "text-amauta-yellow" : ""}`}
       >
         {label} {isActive ? <span aria-hidden>↓</span> : null}
       </Link>
@@ -358,15 +304,7 @@ function SortableHeader({
   );
 }
 
-function PageLink({
-  href,
-  disabled,
-  children,
-}: {
-  href: string;
-  disabled: boolean;
-  children: React.ReactNode;
-}) {
+function PageLink({ href, disabled, children }: { href: string; disabled: boolean; children: React.ReactNode }) {
   if (disabled) {
     return (
       <span className="inline-flex items-center justify-center w-8 h-8 rounded-md text-amauta-text-tertiary/40 cursor-not-allowed">
