@@ -17,6 +17,8 @@ import {
   getMarketSnapshotWithReturns,
 } from "@/lib/cafci/enriched";
 
+export const maxDuration = 60; // PDF gen + CAFCI fetch can take up to ~20s
+
 export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get("key");
   if (!raw) {

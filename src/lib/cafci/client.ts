@@ -31,18 +31,26 @@ const HEADERS: HeadersInit = {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
 };
 
+/** Abort any single CAFCI call after this many ms to prevent hanging. */
+const CAFCI_TIMEOUT_MS = 8_000;
+
 async function cafciGet<T>(path: string): Promise<T> {
   const url = `${BASE}${path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CAFCI_TIMEOUT_MS);
   let res: Response;
   try {
     res = await fetch(url, {
       headers: HEADERS,
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch (e) {
+    clearTimeout(timer);
     console.error(`[cafci] network error for ${path}:`, e);
     throw e;
   }
+  clearTimeout(timer);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     console.error(

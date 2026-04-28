@@ -18,6 +18,7 @@ import type { CartHolding, FichaData } from "@/lib/cafci/enriched";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 export default async function FondoDetailPage({
   params,
