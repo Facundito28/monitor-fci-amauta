@@ -15,6 +15,7 @@ import type {
   CafciResponse,
   DailyStatRow,
   Entidad,
+  FichaData,
   Fondo,
   LatestSnapshot,
   TipoRenta,
@@ -64,10 +65,13 @@ export function getTiposRenta(): Promise<TipoRenta[]> {
   return cafciGet<TipoRenta[]>("/tipo-renta");
 }
 
-/** Listado completo de fondos activos con tipoRenta resuelto. */
+/**
+ * Listado completo de fondos activos con tipoRenta y clase_fondo resueltos.
+ * clase_fondo nos da el claseId de cada clase para poder llamar a /ficha.
+ */
 export function getFondosActivos(): Promise<Fondo[]> {
   return cafciGet<Fondo[]>(
-    "/fondo?estado=1&include=tipoRenta&limit=0&order=nombre",
+    "/fondo?estado=1&include=tipoRenta,clase_fondo&limit=0&order=nombre",
   );
 }
 
@@ -225,22 +229,23 @@ export async function getAllStatsByDate(
 }
 
 /**
- * Portfolio composition (cartera) for all classes in a category on a date.
- * Returns empty array if the endpoint is unavailable or returns no data.
+ * Ficha completa de un fondo/clase desde CAFCI.
+ * GET /fondo/{fondoId}/clase/{claseId}/ficha
+ *
+ * Incluye:
+ *   - Rendimientos oficiales: day.tna, month.tna, yearToDate.tna, oneYear.tna
+ *   - Cartera semanal: .info.semanal.carteras[] con nombreActivo + share (%)
+ *   - Honorarios: honorariosAdministracionGerente, comisionIngreso, etc.
+ *
+ * Returns null on any error (fondo/clase not found, network, etc.).
  */
-export async function getCarteraByCategory(
-  tipoRentaId: string | number,
-  fecha: string,
-): Promise<CarteraRow[]> {
+export async function getFondoFicha(
+  fondoId: string,
+  claseId: string,
+): Promise<FichaData | null> {
   try {
-    const data = await cafciGet<CarteraRow[]>(
-      `/estadisticas/informacion/cartera/${tipoRentaId}/${fecha}`,
-    );
-    if (!Array.isArray(data)) return [];
-    return data.filter(
-      (r) => r && typeof r.fondo === "string" && typeof r.nombreActivo === "string",
-    );
+    return await cafciGet<FichaData>(`/fondo/${fondoId}/clase/${claseId}/ficha`);
   } catch {
-    return [];
+    return null;
   }
 }

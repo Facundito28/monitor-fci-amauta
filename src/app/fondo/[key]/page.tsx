@@ -1,21 +1,19 @@
 /**
  * Detalle de un fondo / clase.
+ * URL: /fondo/[key]  donde key = encodeURIComponent(displayName de CAFCI)
  *
- * URL: /fondo/[key]  donde key = encodeURIComponent(displayName)
- *
- * Muestra:
- *  - Header con nombre, gestora, categoría, horizonte
- *  - KPIs: VCP, AUM, cuotapartes
- *  - Tabla de rendimientos: 1D, 7D, 30D, 1A (TNA y % simple)
- *  - Composición de cartera (CAFCI live, si está disponible)
+ * Datos: GET /fondo/{fondoId}/clase/{claseId}/ficha (CAFCI oficial)
+ *   - Rendimientos: day.tna, month.tna, yearToDate.tna, oneYear.tna
+ *   - Composicion: .info.semanal.carteras[] { nombreActivo, share, tipoActivo }
+ *   - Honorarios: honorariosAdministracionGerente, comisionIngreso, comisionRescate
  */
 import Link from "next/link";
 import {
   fmtDateAr,
-  getFondoComposicion,
+  getFondoFichaData,
   getMarketSnapshotWithReturns,
 } from "@/lib/cafci/enriched";
-import type { CarteraRow, EnrichedRow } from "@/lib/cafci/enriched";
+import type { CartHolding, FichaData } from "@/lib/cafci/enriched";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
@@ -34,22 +32,25 @@ export default async function FondoDetailPage({
     return <ErrorState message="No se pudo conectar con CAFCI." />;
   }
 
-  const fondo = snap.rows.find(
-    (r) => r.key === displayName || r.displayName === displayName,
-  );
+  const fondo = snap.rows.find((r) => r.key === displayName);
 
   if (!fondo) {
     return (
-      <ErrorState message={`No se encontró el fondo "${displayName}".`} />
+      <ErrorState
+        message={`No se encontró el fondo "${displayName}". Puede que el nombre haya cambiado.`}
+      />
     );
   }
 
-  // Fetch composition in parallel (non-blocking — shows placeholder on failure)
-  const composicion = await getFondoComposicion(
-    fondo.displayName,
-    fondo.tipoRentaId,
-    fondo.fecha,
-  );
+  // Fetch official CAFCI ficha (rendimientos + cartera + honorarios)
+  const ficha = await getFondoFichaData(fondo.fondoId, fondo.claseId);
+
+  const rend = ficha?.info?.diaria?.rendimientos;
+  const carteras =
+    ficha?.info?.semanal?.carteras
+      ?.filter((c) => c.nombreActivo && c.share > 0)
+      .sort((a, b) => b.share - a.share) ?? null;
+  const honorarios = ficha?.info?.mensual?.honorariosComisiones;
 
   return (
     <div className="bg-amauta-bg-light flex-1">
@@ -59,10 +60,13 @@ export default async function FondoDetailPage({
           <Link href="/fondos" className="hover:text-amauta-bordo">
             Fondos
           </Link>{" "}
-          / <span className="text-amauta-text-secondary">{fondo.displayName}</span>
+          /{" "}
+          <span className="text-amauta-text-secondary truncate">
+            {fondo.displayName}
+          </span>
         </nav>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div className="bg-amauta-dark text-white rounded-lg p-6 mb-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -85,8 +89,10 @@ export default async function FondoDetailPage({
                 <p className="mt-1 text-white/70 text-sm">{fondo.gestora}</p>
               )}
             </div>
-            <div className="text-right">
-              <p className="text-xs text-white/50 uppercase tracking-wider">Cierre</p>
+            <div className="text-right shrink-0">
+              <p className="text-xs text-white/50 uppercase tracking-wider">
+                Cierre
+              </p>
               <p className="text-lg font-bold text-amauta-yellow">
                 {fmtDateAr(fondo.fecha)}
               </p>
@@ -94,7 +100,7 @@ export default async function FondoDetailPage({
           </div>
 
           {/* KPIs */}
-          <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Kpi label="VCP" value={fmtNumber(fondo.vcp, 4)} />
             <Kpi
               label="Patrimonio (AUM)"
@@ -108,10 +114,18 @@ export default async function FondoDetailPage({
               label="Cuotapartes"
               value={fondo.ccp ? fmtNumber(fondo.ccp, 0) : "—"}
             />
+            <Kpi
+              label="Hon. Gerente"
+              value={
+                honorarios?.honorariosAdministracionGerente
+                  ? `${parseFloat(honorarios.honorariosAdministracionGerente).toFixed(2)}%`
+                  : "—"
+              }
+            />
           </div>
         </div>
 
-        {/* Rendimientos */}
+        {/* ── Rendimientos ── */}
         <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
           <header className="bg-amauta-dark text-white px-4 py-3">
             <h2 className="font-extrabold text-sm uppercase tracking-wider">
@@ -123,40 +137,82 @@ export default async function FondoDetailPage({
               <thead className="bg-amauta-bg-light/50 text-amauta-text-tertiary text-xs uppercase">
                 <tr>
                   <th className="px-4 py-2 text-left font-bold">Período</th>
-                  <th className="px-4 py-2 text-right font-bold">Rendimiento</th>
-                  <th className="px-4 py-2 text-right font-bold">TNA equiv.</th>
+                  <th className="px-4 py-2 text-right font-bold">TNA</th>
+                  <th className="px-4 py-2 text-right font-bold">
+                    Rend. Simple
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                <ReturnRow
+                <ReturnRowFicha
                   label="Diario (1D)"
-                  ret={fondo.ret1d}
-                  tna={fondo.tna1d}
+                  tna={rend?.day?.tna ?? fondo.tna1d}
+                  simple={rend?.day?.simple ?? fondo.ret1d}
                 />
-                <ReturnRow label="Semanal (7D)" ret={fondo.ret7d} tna={null} />
-                <ReturnRow
+                <ReturnRowFicha
+                  label="Semanal (7D)"
+                  tna={rend?.week?.tna ?? null}
+                  simple={fondo.ret7d}
+                />
+                <ReturnRowFicha
                   label="Mensual (30D)"
-                  ret={fondo.ret30d}
-                  tna={fondo.tna30d}
+                  tna={rend?.month?.tna ?? fondo.tna30d}
+                  simple={rend?.month?.simple ?? fondo.ret30d}
                 />
-                <ReturnRow
+                <ReturnRowFicha
+                  label="Año en curso (YTD)"
+                  tna={rend?.yearToDate?.tna ?? null}
+                  simple={rend?.yearToDate?.simple ?? null}
+                />
+                <ReturnRowFicha
                   label="Interanual (1A)"
-                  ret={fondo.ret1a}
-                  tna={fondo.tna1a}
+                  tna={rend?.oneYear?.tna ?? fondo.tna1a}
+                  simple={rend?.oneYear?.simple ?? fondo.ret1a}
                 />
               </tbody>
             </table>
           </div>
           <div className="px-4 py-2 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light bg-amauta-bg-light/30">
-            TNA = (rendimiento del período × 365/días) × 100. Fuente: CAFCI.
+            {ficha
+              ? "Fuente: CAFCI oficial (/ficha). TNA = tasa nominal anual calculada por CAFCI."
+              : "Fuente: cálculo sobre VCP de CAFCI. TNA = rendimiento × (365/días)."}
           </div>
         </section>
 
-        {/* Composición */}
-        <ComposicionSection composicion={composicion} />
+        {/* ── Composición de Cartera ── */}
+        <ComposicionSection carteras={carteras} hasFicha={ficha != null} />
 
-        {/* Acciones */}
-        <div className="mt-6 flex flex-wrap gap-3">
+        {/* ── Honorarios ── */}
+        {honorarios && (
+          <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
+            <header className="bg-amauta-dark text-white px-4 py-3">
+              <h2 className="font-extrabold text-sm uppercase tracking-wider">
+                Honorarios y Comisiones
+              </h2>
+            </header>
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-amauta-bg-light">
+              <HonorarioCell
+                label="Hon. Gerente"
+                value={honorarios.honorariosAdministracionGerente}
+              />
+              <HonorarioCell
+                label="Hon. Depositaria"
+                value={honorarios.honorariosAdministracionDepositaria}
+              />
+              <HonorarioCell
+                label="Com. Ingreso"
+                value={honorarios.comisionIngreso}
+              />
+              <HonorarioCell
+                label="Com. Rescate"
+                value={honorarios.comisionRescate}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* ── Acciones ── */}
+        <div className="mt-4 flex flex-wrap gap-3">
           <Link
             href={`/comparar?fondos=${encodeURIComponent(fondo.key)}`}
             className="inline-flex items-center justify-center px-5 py-2 rounded-md bg-amauta-yellow text-amauta-dark font-bold text-sm hover:bg-amauta-yellow-hover transition-colors"
@@ -190,37 +246,70 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ReturnRow({
+function ReturnRowFicha({
   label,
-  ret,
   tna,
+  simple,
 }: {
   label: string;
-  ret: number | null;
-  tna: number | null;
+  tna: number | null | undefined;
+  simple: number | null | undefined;
 }) {
-  const retFmt = fmtReturn(ret, 2);
-  const tnaFmt = fmtReturn(tna, 2);
+  const tnaVal = tna ?? null;
+  const simpleVal = simple ?? null;
+  const tnaFmt = fmtReturn(tnaVal, 2);
+  const simpleFmt = fmtReturn(simpleVal, 2);
   return (
     <tr className="border-t border-amauta-bg-light">
       <td className="px-4 py-3 text-amauta-text-secondary">{label}</td>
-      <td className={`px-4 py-3 text-right tabular-nums ${retFmt.colorClass}`}>
-        {retFmt.text}
+      <td className={`px-4 py-3 text-right tabular-nums ${tnaFmt.colorClass}`}>
+        {tnaFmt.text}
       </td>
-      <td className={`px-4 py-3 text-right tabular-nums ${tna != null ? tnaFmt.colorClass : "text-amauta-text-tertiary"}`}>
-        {tna != null ? tnaFmt.text : "—"}
+      <td
+        className={`px-4 py-3 text-right tabular-nums ${simpleFmt.colorClass}`}
+      >
+        {simpleFmt.text}
       </td>
     </tr>
   );
 }
 
-function ComposicionSection({
-  composicion,
-}: {
-  composicion: CarteraRow[] | null;
-}) {
+function HonorarioCell({ label, value }: { label: string; value?: string }) {
+  const num = value ? parseFloat(value) : null;
   return (
-    <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden">
+    <div className="px-4 py-3 text-center">
+      <p className="text-xs text-amauta-text-tertiary uppercase tracking-wider mb-1">
+        {label}
+      </p>
+      <p className="font-bold text-amauta-bordo tabular-nums">
+        {num != null && !isNaN(num) ? `${num.toFixed(2)}%` : "—"}
+      </p>
+    </div>
+  );
+}
+
+function ComposicionSection({
+  carteras,
+  hasFicha,
+}: {
+  carteras: CartHolding[] | null;
+  hasFicha: boolean;
+}) {
+  const COLORS = [
+    "bg-amauta-bordo",
+    "bg-amauta-yellow",
+    "bg-blue-500",
+    "bg-emerald-500",
+    "bg-purple-500",
+    "bg-orange-500",
+    "bg-teal-500",
+    "bg-pink-500",
+    "bg-indigo-500",
+    "bg-amber-400",
+  ];
+
+  return (
+    <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
       <header className="bg-amauta-dark text-white px-4 py-3 flex items-center justify-between">
         <h2 className="font-extrabold text-sm uppercase tracking-wider">
           Composición de Cartera
@@ -228,54 +317,52 @@ function ComposicionSection({
         <span className="text-xs text-white/50">CAFCI Live</span>
       </header>
 
-      {composicion == null ? (
+      {!hasFicha ? (
+        <div className="px-4 py-8 text-center text-amauta-text-tertiary text-sm">
+          <div className="text-3xl mb-2">📊</div>
+          <p className="font-medium">Ficha no disponible</p>
+          <p className="mt-1 text-xs">
+            No se pudo resolver el fondoId/claseId para este fondo.
+          </p>
+        </div>
+      ) : !carteras || carteras.length === 0 ? (
         <div className="px-4 py-8 text-center text-amauta-text-tertiary text-sm">
           <div className="text-3xl mb-2">📊</div>
           <p className="font-medium">Composición no disponible</p>
           <p className="mt-1 text-xs">
-            La API de CAFCI no expone la cartera detallada para este fondo.
+            CAFCI no publicó la cartera semanal para este fondo aún.
           </p>
         </div>
       ) : (
         <>
-          {/* Bar chart visual */}
+          {/* Horizontal bar chart */}
           <div className="px-4 pt-4 pb-2">
-            {composicion.slice(0, 10).map((h, i) => {
-              const colors = [
-                "bg-amauta-bordo",
-                "bg-amauta-yellow",
-                "bg-blue-500",
-                "bg-emerald-500",
-                "bg-purple-500",
-                "bg-orange-500",
-                "bg-teal-500",
-                "bg-pink-500",
-                "bg-indigo-500",
-                "bg-amber-400",
-              ];
-              const color = colors[i % colors.length];
-              return (
-                <div key={i} className="mb-2">
-                  <div className="flex items-center justify-between text-xs mb-0.5">
-                    <span className="font-medium text-amauta-text-secondary truncate max-w-[70%]">
-                      {h.nombreActivo}
-                    </span>
-                    <span className="tabular-nums font-semibold text-amauta-bordo">
-                      {fmtNumber(h.porcentaje, 2)}%
-                    </span>
-                  </div>
-                  <div className="h-2 bg-amauta-bg-light rounded-full overflow-hidden">
-                    <div
-                      className={`h-full ${color} rounded-full`}
-                      style={{ width: `${Math.min(h.porcentaje, 100)}%` }}
-                    />
-                  </div>
+            {carteras.slice(0, 10).map((h, i) => (
+              <div key={i} className="mb-3">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-medium text-amauta-text-secondary truncate max-w-[72%]">
+                    {h.nombreActivo}
+                    {h.tipoActivo && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded bg-amauta-bg-light text-amauta-text-tertiary font-normal">
+                        {h.tipoActivo}
+                      </span>
+                    )}
+                  </span>
+                  <span className="tabular-nums font-bold text-amauta-bordo">
+                    {fmtNumber(h.share, 2)}%
+                  </span>
                 </div>
-              );
-            })}
+                <div className="h-2 bg-amauta-bg-light rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${COLORS[i % COLORS.length]} rounded-full`}
+                    style={{ width: `${Math.min(h.share, 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Table */}
+          {/* Detail table */}
           <div className="overflow-x-auto border-t border-amauta-bg-light">
             <table className="w-full text-sm">
               <thead className="bg-amauta-bg-light/50 text-amauta-text-tertiary text-xs uppercase">
@@ -286,7 +373,7 @@ function ComposicionSection({
                 </tr>
               </thead>
               <tbody>
-                {composicion.map((h, i) => (
+                {carteras.map((h, i) => (
                   <tr
                     key={i}
                     className="border-t border-amauta-bg-light hover:bg-amauta-bg-light/40"
@@ -298,7 +385,7 @@ function ComposicionSection({
                       {h.tipoActivo ?? "—"}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums font-semibold text-amauta-text-secondary">
-                      {fmtNumber(h.porcentaje, 2)}%
+                      {fmtNumber(h.share, 2)}%
                     </td>
                   </tr>
                 ))}
@@ -306,7 +393,8 @@ function ComposicionSection({
             </table>
           </div>
           <p className="px-4 py-2 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light">
-            Datos provistos por CAFCI. Verificar con la fuente oficial.
+            Composición semanal · Fuente: CAFCI. Verificar con la fuente
+            oficial.
           </p>
         </>
       )}

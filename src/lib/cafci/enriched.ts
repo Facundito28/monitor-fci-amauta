@@ -9,16 +9,16 @@ import {
   buildVcpMapForDate,
   fondoBaseName,
   getAllStatsByDate,
-  getCarteraByCategory,
+  getFondoFicha,
   getFondosActivos,
   getGestoraMap,
   getLatestBusinessDate,
   getTiposRenta,
   subtractDays,
 } from "./client";
-import type { CarteraRow, DailyStatRow, Fondo } from "./types";
+import type { CartHolding, DailyStatRow, FichaData, Fondo } from "./types";
 
-export type { CarteraRow };
+export type { CartHolding, FichaData };
 
 export interface EnrichedRow {
   /** Unique key = CAFCI display name. */
@@ -29,7 +29,12 @@ export interface EnrichedRow {
   baseName: string;
   /** Parent fondo id (string), null if no match found. */
   fondoId: string | null;
-  /** tipoRentaId — needed for composition lookups. */
+  /**
+   * CAFCI clase id — from clase_fondos[] lookup.
+   * Required together with fondoId to call /fondo/{fondoId}/clase/{claseId}/ficha.
+   */
+  claseId: string | null;
+  /** tipoRentaId — kept for category-level queries. */
   tipoRentaId: string | null;
   /** Category name like "Renta Fija", "Mercado de Dinero". */
   categoria: string | null;
@@ -107,6 +112,14 @@ function buildEnrichedRow(
   const patrimonio = typeof stat.patrimonio === "number" ? stat.patrimonio : null;
   const ccp = typeof stat.ccp === "number" ? stat.ccp : null;
 
+  // Resolve the CAFCI class ID by matching the display name against clase_fondos[].nombre.
+  // CAFCI daily stats use the same display name as clase_fondos[].nombre.
+  const statNameLower = stat.fondo.toLowerCase().trim();
+  const claseId =
+    parent?.clase_fondos?.find(
+      (c) => c.nombre.toLowerCase().trim() === statNameLower,
+    )?.id ?? null;
+
   const key = stat.fondo;
   const vcpNow = stat.vcp;
 
@@ -120,6 +133,7 @@ function buildEnrichedRow(
     displayName: stat.fondo,
     baseName,
     fondoId: parent?.id ?? null,
+    claseId,
     tipoRentaId: parent?.tipoRentaId ?? null,
     categoria,
     gestora,
@@ -217,25 +231,17 @@ export async function getMarketSnapshotWithReturns(): Promise<MarketSnapshot> {
 }
 
 /**
- * Fetch portfolio composition for a specific fund class from CAFCI.
- * Returns null if the data is unavailable (endpoint not responding or
- * the fund has no cartera data for that date).
+ * Fetch the full ficha (rendimientos + composicion + fees) for a fund class.
+ * Uses the official CAFCI endpoint: GET /fondo/{fondoId}/clase/{claseId}/ficha
+ *
+ * Returns null if fondoId or claseId are unavailable, or the API fails.
  */
-export async function getFondoComposicion(
-  displayName: string,
-  tipoRentaId: string | null,
-  fecha: string,
-): Promise<CarteraRow[] | null> {
-  if (!tipoRentaId) return null;
-  try {
-    const rows = await getCarteraByCategory(tipoRentaId, fecha);
-    const filtered = rows.filter(
-      (r) => r.fondo.toLowerCase() === displayName.toLowerCase(),
-    );
-    return filtered.length > 0 ? filtered.sort((a, b) => b.porcentaje - a.porcentaje) : null;
-  } catch {
-    return null;
-  }
+export async function getFondoFichaData(
+  fondoId: string | null,
+  claseId: string | null,
+): Promise<FichaData | null> {
+  if (!fondoId || !claseId) return null;
+  return getFondoFicha(fondoId, claseId);
 }
 
 function horizonteFromCode(code: string | undefined): string | null {

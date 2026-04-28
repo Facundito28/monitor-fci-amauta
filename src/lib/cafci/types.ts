@@ -58,23 +58,75 @@ export interface LatestSnapshot {
 }
 
 /**
- * One row of the cartera (portfolio composition) endpoint.
- * GET /estadisticas/informacion/cartera/{tipoRentaId}/{fecha}
- * Each row represents one holding in one fund class on that date.
+ * One clase within a Fondo, as returned by include=clase_fondo.
+ * GET /fondo?include=clase_fondo
  */
-export interface CarteraRow {
-  /** Fund class display name — matches DailyStatRow.fondo */
-  fondo: string;
-  /** Asset / security name */
-  nombreActivo: string;
-  /** Asset type label (e.g. "Tasa CER ARS", "Otros", "Acciones") */
-  tipoActivo?: string;
-  /** Portfolio weight as percentage (0-100) */
-  porcentaje: number;
+export interface ClaseFondo {
+  id: string;
+  nombre: string;
+  tipoClaseId: string;
 }
 
 /**
- * Fondo as returned by /fondo?include=tipoRenta
+ * One holding in a fund's portfolio cartera.
+ * From GET /fondo/{fondoId}/clase/{claseId}/ficha
+ * → .data.info.semanal.carteras[]
+ */
+export interface CartHolding {
+  nombreActivo: string;
+  tipoActivo?: string;
+  /** Portfolio weight as percentage (0–100). */
+  share: number;
+}
+
+/**
+ * Rendimiento entry for a single time window from the ficha endpoint.
+ * Values are TNA percentages (e.g. 65.5 means 65.5% TNA).
+ */
+export interface FichaRendimiento {
+  tna: number;
+  tea?: number;
+  simple?: number;
+}
+
+/**
+ * Core data returned by GET /fondo/{fondoId}/clase/{claseId}/ficha
+ * Shape: { success: true, data: FichaData }
+ */
+export interface FichaData {
+  info: {
+    diaria: {
+      actual: {
+        patrimonio: number;
+        fecha: string;
+        vcp?: number;
+      };
+      rendimientos: {
+        day?: FichaRendimiento;
+        week?: FichaRendimiento;
+        month?: FichaRendimiento;
+        yearToDate?: FichaRendimiento;
+        oneYear?: FichaRendimiento;
+        threeYear?: FichaRendimiento;
+        fiveYear?: FichaRendimiento;
+      };
+    };
+    semanal?: {
+      carteras?: CartHolding[];
+    };
+    mensual?: {
+      honorariosComisiones?: {
+        honorariosAdministracionGerente?: string;
+        honorariosAdministracionDepositaria?: string;
+        comisionIngreso?: string;
+        comisionRescate?: string;
+      };
+    };
+  };
+}
+
+/**
+ * Fondo as returned by /fondo?include=tipoRenta,clase_fondo
  * Foreign key IDs come as strings.
  */
 export interface Fondo {
@@ -98,4 +150,17 @@ export interface Fondo {
   horizonteViejo?: string;
   /** Resolved when fetched with include=tipoRenta */
   tipoRenta?: TipoRenta;
+  /** Resolved when fetched with include=clase_fondo */
+  clase_fondos?: ClaseFondo[];
+}
+
+/**
+ * @deprecated Replaced by CartHolding + getFondoFicha().
+ * Kept for backwards compat — remove once composition is fully migrated.
+ */
+export interface CarteraRow {
+  fondo: string;
+  nombreActivo: string;
+  tipoActivo?: string;
+  porcentaje: number;
 }
