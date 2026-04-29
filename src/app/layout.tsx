@@ -47,20 +47,15 @@ function Header() {
         <Link href="/" className="flex items-center gap-3 group">
           <Image
             src="/logo_amauta.png"
-            alt="Amauta Inversiones"
-            width={235}
-            height={61}
-            className="h-8 w-auto"
+            alt="Amauta Inversiones Financieras"
+            width={1360}
+            height={355}
+            className="h-9 w-auto"
             quality={100}
             priority
           />
-          <span className="hidden sm:flex flex-col leading-none border-l border-amauta-bg-light pl-3">
-            <span className="text-[10px] uppercase tracking-[0.18em] text-amauta-text-secondary font-medium">
-              Monitor FCIs
-            </span>
-            <span className="text-sm font-extrabold text-amauta-bordo group-hover:text-amauta-bordo-hover transition-colors">
-              Amauta Inversiones
-            </span>
+          <span className="hidden sm:inline-flex items-center px-2 py-1 rounded-xs bg-amauta-bg-light text-amauta-bordo text-[11px] uppercase tracking-[0.14em] font-extrabold border-l-2 border-amauta-yellow">
+            Monitor FCIs
           </span>
         </Link>
 
@@ -112,26 +107,19 @@ function Footer() {
 
       <div className="max-w-7xl mx-auto px-6 py-12 grid gap-10 sm:grid-cols-2 lg:grid-cols-4 text-sm">
         <div className="lg:col-span-2">
-          <div className="flex items-center gap-3 mb-4">
-            <Image
-              src="/logo_amauta.png"
-              alt="Amauta Inversiones"
-              width={235}
-              height={61}
-              className="h-7 w-auto brightness-0 invert"
-              quality={100}
-            />
-            <div className="flex flex-col leading-none border-l border-white/15 pl-3">
-              <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-medium">
-                Multifamily Office
-              </span>
-              <span className="text-white font-extrabold text-base">
-                Amauta Inversiones
-              </span>
-            </div>
-          </div>
+          <Image
+            src="/logo_amauta.png"
+            alt="Amauta Inversiones Financieras"
+            width={1360}
+            height={355}
+            className="h-10 w-auto mb-5 brightness-0 invert"
+            quality={100}
+          />
+          <p className="text-[11px] uppercase tracking-[0.18em] text-amauta-yellow font-bold mb-2">
+            Multifamily Office
+          </p>
           <p className="text-sm leading-relaxed text-white/70 max-w-md">
-            Independencia, integridad, excelencia. Conocimiento para crecer.
+            Independencia, integridad, excelencia. <span className="text-white">Conocimiento para crecer.</span>
           </p>
           <p className="mt-4 text-xs text-white/50">
             Matrícula CNV 1029 · San Miguel de Tucumán, Argentina
