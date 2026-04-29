@@ -31,7 +31,7 @@ export const metadata = {
     "Rankings de Fondos Comunes de Inversión argentinos por rendimiento diario, semanal, mensual e interanual.",
 };
 
-export const revalidate = 600;
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export default async function RankingsPage({

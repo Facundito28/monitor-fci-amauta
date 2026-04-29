@@ -2,9 +2,10 @@ import Link from "next/link";
 import { fmtCompactCurrency } from "@/lib/utils/format";
 import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
 
-// ISR — page revalidates every 10 min. CAFCI publishes daily post-cierre,
-// so this keeps KPIs fresh during trading hours while making cached visits instant.
-export const revalidate = 600;
+// Render dinámico: evita pre-render en build (CAFCI puede dar timeout durante build).
+// El speedup viene del Data Cache de Vercel: el cliente CAFCI usa next.revalidate=600,
+// así que el 1er hit hace fetch real y los siguientes 10min son instantáneos.
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const snap = await getMarketSnapshot().catch(() => null);
