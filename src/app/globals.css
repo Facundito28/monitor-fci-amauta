@@ -1,25 +1,69 @@
 @import "tailwindcss";
 
 @theme {
-  /* Amauta Inversiones brand palette */
-  --color-amauta-yellow: #f3cf11;
+  /* ── Amauta Inversiones brand palette ───────────────────────────────────
+     Extracted from amautainversiones.com via designMD (TypeUI). Mapped to
+     semantic Tailwind utilities (bg-amauta-*, text-amauta-*, border-amauta-*). */
+  --color-amauta-yellow: #f3cf11;            /* surface.raised — CTAs, accents */
   --color-amauta-yellow-hover: #d9b80f;
-  --color-amauta-bordo: #621044;
+  --color-amauta-bordo: #621044;             /* text.secondary — emphasis */
   --color-amauta-bordo-hover: #4a0c34;
-  --color-amauta-dark: #231f20;
-  --color-amauta-bg-light: #f1f1f1;
-  --color-amauta-text: #000000;
-  --color-amauta-text-secondary: #666666;
+  --color-amauta-dark: #231f20;              /* surface.strong — header/footer */
+  --color-amauta-dark-hover: #1a1718;
+  --color-amauta-bg-light: #f1f1f1;          /* neutral page background */
+  --color-amauta-text: #000000;              /* surface.base — primary text */
+  --color-amauta-text-secondary: #666666;    /* text.tertiary — body secondary */
   --color-amauta-text-tertiary: #58585a;
 
   --color-background: #ffffff;
   --color-foreground: #000000;
 
-  --font-sans: var(--font-fira-sans), system-ui, sans-serif;
+  /* ── Typography (Fira Sans stack from extracted SKILL.md) ─────────────── */
+  --font-sans: var(--font-fira-sans), Helvetica, Arial, Lucida, sans-serif;
+
+  /* Conservative scale: site uses 13-22px for body/UI; larger sizes
+     extrapolated for hero titles (extractor samples visible elements). */
+  --text-xs: 13px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-md: 15px;
+  --text-lg: 17px;
+  --text-xl: 20px;
+  --text-2xl: 22px;
+  --text-3xl: 28px;
+  --text-4xl: 36px;
+  --text-5xl: 48px;
+
+  /* ── Radii (site stays low — never go above 8px outside avatars) ───── */
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* ── Shadows (single elevation token from extraction) ───────────────── */
+  --shadow-card: 0px 12px 18px -6px rgba(0, 0, 0, 0.3);
+}
+
+:root {
+  /* Motion tokens — referenced via transition-duration: var(--motion-fast) */
+  --motion-instant: 200ms;
+  --motion-fast: 300ms;
+  --motion-normal: 400ms;
 }
 
 body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Decorative yellow rule used for section dividers / hero accents */
+.amauta-rule {
+  display: block;
+  width: 64px;
+  height: 4px;
+  background: var(--color-amauta-yellow);
+  border-radius: var(--radius-xs);
 }

@@ -127,17 +127,21 @@ export default async function FondosPage({
       <div className="max-w-7xl mx-auto px-6 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-extrabold text-amauta-bordo">
+            <span className="text-[11px] uppercase tracking-[0.18em] text-amauta-bordo font-bold">
+              Plataforma · Listado
+            </span>
+            <h1 className="mt-2 text-3xl font-extrabold text-amauta-text">
               Fondos Comunes de Inversión
             </h1>
-            <p className="mt-1 text-sm text-amauta-text-secondary">
+            <span className="amauta-rule mt-3" />
+            <p className="mt-3 text-sm text-amauta-text-secondary">
               {total.toLocaleString("es-AR")} clases · cierre{" "}
               {fmtDateAr(snap.fecha)} · datos en vivo de{" "}
               <a
                 href="https://www.cafci.org.ar/"
                 target="_blank"
                 rel="noreferrer"
-                className="underline hover:text-amauta-bordo"
+                className="underline underline-offset-2 hover:text-amauta-bordo"
               >
                 CAFCI
               </a>

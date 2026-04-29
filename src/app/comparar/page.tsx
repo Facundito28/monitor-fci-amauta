@@ -83,10 +83,14 @@ export default async function CompararPage({
     <div className="bg-amauta-bg-light flex-1">
       <div className="max-w-7xl mx-auto px-6 py-10">
         <div className="mb-6">
-          <h1 className="text-3xl font-extrabold text-amauta-bordo">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-amauta-bordo font-bold">
+            Plataforma · Comparador
+          </span>
+          <h1 className="mt-2 text-3xl font-extrabold text-amauta-text">
             Comparador de fondos
           </h1>
-          <p className="mt-1 text-sm text-amauta-text-secondary">
+          <span className="amauta-rule mt-3" />
+          <p className="mt-3 text-sm text-amauta-text-secondary">
             Hasta {MAX_FONDOS} clases lado a lado · cierre{" "}
             {fmtDateAr(snap.fecha)} · permalink compartible
           </p>
