@@ -2,8 +2,9 @@ import Link from "next/link";
 import { fmtCompactCurrency } from "@/lib/utils/format";
 import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
 
-// Live snapshot — refresh on each request (CAFCI dedups inside the request).
-export const dynamic = "force-dynamic";
+// ISR — page revalidates every 10 min. CAFCI publishes daily post-cierre,
+// so this keeps KPIs fresh during trading hours while making cached visits instant.
+export const revalidate = 600;
 
 export default async function Home() {
   const snap = await getMarketSnapshot().catch(() => null);

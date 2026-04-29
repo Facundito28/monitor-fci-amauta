@@ -22,7 +22,7 @@ export const metadata = {
     "Compará hasta 4 Fondos Comunes de Inversión argentinos lado a lado. Permalink compartible.",
 };
 
-export const dynamic = "force-dynamic";
+export const revalidate = 600;
 export const maxDuration = 30;
 
 export default async function CompararPage({

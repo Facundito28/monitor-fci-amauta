@@ -26,7 +26,7 @@ export const metadata = {
     "Listado completo de Fondos Comunes de Inversión argentinos con VCP, patrimonio, rendimiento diario y mensual.",
 };
 
-export const dynamic = "force-dynamic";
+export const revalidate = 600;
 export const maxDuration = 30;
 
 type SortKey =

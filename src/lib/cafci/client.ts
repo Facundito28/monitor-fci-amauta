@@ -34,6 +34,11 @@ const HEADERS: HeadersInit = {
 /** Abort any single CAFCI call after this many ms to prevent hanging. */
 const CAFCI_TIMEOUT_MS = 8_000;
 
+/** Cache CAFCI responses on Vercel's Data Cache for 10 min.
+ * CAFCI publishes daily post-cierre, so refreshing every 10 min keeps the UI
+ * fresh during trading hours while making subsequent visits near-instant. */
+const CAFCI_REVALIDATE_S = 600;
+
 async function cafciGet<T>(path: string): Promise<T> {
   const url = `${BASE}${path}`;
   const controller = new AbortController();
@@ -42,7 +47,7 @@ async function cafciGet<T>(path: string): Promise<T> {
   try {
     res = await fetch(url, {
       headers: HEADERS,
-      cache: "no-store",
+      next: { revalidate: CAFCI_REVALIDATE_S },
       signal: controller.signal,
     });
   } catch (e) {

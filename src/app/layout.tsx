@@ -48,17 +48,18 @@ function Header() {
           <Image
             src="/logo_amauta.png"
             alt="Amauta Inversiones"
-            width={40}
-            height={40}
-            className="h-10 w-auto"
+            width={235}
+            height={61}
+            className="h-8 w-auto"
+            quality={100}
             priority
           />
-          <span className="hidden sm:flex flex-col leading-none">
-            <span className="text-[11px] uppercase tracking-[0.18em] text-amauta-text-secondary font-medium">
-              Amauta Inversiones
-            </span>
-            <span className="text-base font-extrabold text-amauta-bordo group-hover:text-amauta-bordo-hover transition-colors">
+          <span className="hidden sm:flex flex-col leading-none border-l border-amauta-bg-light pl-3">
+            <span className="text-[10px] uppercase tracking-[0.18em] text-amauta-text-secondary font-medium">
               Monitor FCIs
+            </span>
+            <span className="text-sm font-extrabold text-amauta-bordo group-hover:text-amauta-bordo-hover transition-colors">
+              Amauta Inversiones
             </span>
           </span>
         </Link>
@@ -115,15 +116,16 @@ function Footer() {
             <Image
               src="/logo_amauta.png"
               alt="Amauta Inversiones"
-              width={40}
-              height={40}
-              className="h-10 w-auto"
+              width={235}
+              height={61}
+              className="h-7 w-auto brightness-0 invert"
+              quality={100}
             />
-            <div className="flex flex-col leading-none">
-              <span className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-medium">
+            <div className="flex flex-col leading-none border-l border-white/15 pl-3">
+              <span className="text-[10px] uppercase tracking-[0.18em] text-white/60 font-medium">
                 Multifamily Office
               </span>
-              <span className="text-white font-extrabold text-lg">
+              <span className="text-white font-extrabold text-base">
                 Amauta Inversiones
               </span>
             </div>
