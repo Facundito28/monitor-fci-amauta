@@ -6,8 +6,8 @@
  */
 import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
-import type { EnrichedRow } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
+import type { EnrichedRow } from "@/lib/fondos/enriched";
 
 const TOP_N = 10;
 
@@ -53,7 +53,7 @@ export default async function RankingsPage({
       <div className="flex-1 flex items-center justify-center bg-amauta-bg-light">
         <div className="bg-white rounded-lg p-8 text-center">
           <p className="text-amauta-text-secondary">
-            No se pudo conectar con CAFCI. Volvé a intentar en unos minutos.
+            No pudimos cargar los datos de fondos. Volvé a intentar en unos minutos.
           </p>
         </div>
       </div>
@@ -183,9 +183,9 @@ export default async function RankingsPage({
         )}
 
         <p className="mt-6 text-xs text-amauta-text-tertiary">
-          Rendimientos calculados sobre VCP de CAFCI ·{" "}
+          Rendimientos calculados sobre VCP diario ·{" "}
           <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos
-          (corrección de VCP o distribución), verificar en CAFCI
+          (corrección de VCP o distribución), verificar con la fuente oficial
         </p>
       </div>
     </div>
@@ -265,7 +265,7 @@ function CategoryCard({
                 </td>
                 <td
                   className={`px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold ${retFmt.colorClass}`}
-                  title={retFmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+                  title={retFmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
                 >
                   {retFmt.text}
                 </td>

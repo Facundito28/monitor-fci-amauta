@@ -1,20 +1,19 @@
 /**
  * Detalle de un fondo / clase.
- * URL: /fondo/[key]  donde key = encodeURIComponent(displayName de CAFCI)
+ * URL: /fondo/[key]  donde key = encodeURIComponent(displayName del fondo).
  *
- * Datos: GET /fondo/{fondoId}/clase/{claseId}/ficha (CAFCI oficial)
- *   - Rendimientos: day.tna, month.tna, yearToDate.tna, oneYear.tna
- *   - Composicion: .info.semanal.carteras[] { nombreActivo, share, tipoActivo }
- *   - Honorarios: honorariosAdministracionGerente, comisionIngreso, comisionRescate
+ * Datos:
+ *   - Bulk snapshot (`getMarketSnapshotWithReturns`) → encontrar la fila.
+ *   - Detalle (`getFondoDetalle`) → volatilidad, sharpe, rend 7d / 90d.
+ *   - Rendimiento por período (`getReturnInRange`) → cálculo server-side.
  */
 import Link from "next/link";
 import {
   fmtDateAr,
-  getFondoFichaData,
-  getFundVcpOnDate,
+  getFondoDetalle,
   getMarketSnapshotWithReturns,
-} from "@/lib/cafci/enriched";
-import type { CartHolding, FichaData } from "@/lib/cafci/enriched";
+  getReturnInRange,
+} from "@/lib/fondos/enriched";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +34,7 @@ export default async function FondoDetailPage({
   const snap = await getMarketSnapshotWithReturns().catch(() => null);
 
   if (!snap) {
-    return <ErrorState message="No se pudo conectar con CAFCI." />;
+    return <ErrorState message="No pudimos cargar los datos de fondos." />;
   }
 
   const fondo = snap.rows.find((r) => r.key === displayName);
@@ -48,15 +47,8 @@ export default async function FondoDetailPage({
     );
   }
 
-  // Fetch official CAFCI ficha (rendimientos + cartera + honorarios)
-  const ficha = await getFondoFichaData(fondo.fondoId, fondo.claseId);
-
-  const rend = ficha?.info?.diaria?.rendimientos;
-  const carteras =
-    ficha?.info?.semanal?.carteras
-      ?.filter((c) => c.nombreActivo && c.share > 0)
-      .sort((a, b) => b.share - a.share) ?? null;
-  const honorarios = ficha?.info?.mensual?.honorariosComisiones;
+  // Detail call (vol, sharpe, 7d / 90d) — non-blocking-ish; tolerate failure.
+  const detalle = await getFondoDetalle(fondo.displayName).catch(() => null);
 
   // ── Custom date range query ────────────────────────────────────────────────
   type CustomResult = {
@@ -75,34 +67,32 @@ export default async function FondoDetailPage({
     if (desde >= hasta) {
       customError = "La fecha inicio debe ser anterior a la fecha fin.";
     } else {
-      const [vcpDesdeData, vcpHastaData] = await Promise.all([
-        getFundVcpOnDate(fondo.tipoRentaId, fondo.key, desde).catch(() => null),
-        getFundVcpOnDate(fondo.tipoRentaId, fondo.key, hasta).catch(() => null),
-      ]);
-      if (!vcpDesdeData) {
-        customError = `No hay datos para la fecha inicio (${fmtDateAr(desde)}). Probá con otro día hábil.`;
-      } else if (!vcpHastaData) {
-        customError = `No hay datos para la fecha fin (${fmtDateAr(hasta)}). Probá con otro día hábil.`;
+      const r = await getReturnInRange(fondo.displayName, desde, hasta).catch(
+        () => null,
+      );
+      if (!r) {
+        customError =
+          "No pudimos calcular el rendimiento para ese rango. Probá con días hábiles dentro del histórico disponible.";
       } else {
-        const ret = ((vcpHastaData.vcp / vcpDesdeData.vcp) - 1) * 100;
-        const dias = Math.round(
-          (new Date(vcpHastaData.date + "T12:00:00Z").getTime() -
-            new Date(vcpDesdeData.date + "T12:00:00Z").getTime()) /
-            (1000 * 60 * 60 * 24),
-        );
-        const tna = dias > 0 ? ret * (365 / dias) : 0;
         customResult = {
-          vcpDesde: vcpDesdeData.vcp,
-          dateDesde: vcpDesdeData.date,
-          vcpHasta: vcpHastaData.vcp,
-          dateHasta: vcpHastaData.date,
-          ret,
-          dias,
-          tna,
+          vcpDesde: r.vcpFrom,
+          dateDesde: r.fechaFrom,
+          vcpHasta: r.vcpTo,
+          dateHasta: r.fechaTo,
+          ret: r.retPct,
+          dias: r.dias,
+          tna: r.tnaPct,
         };
       }
     }
   }
+
+  const ret7d = detalle?.rend7d ?? null;
+  const tienHonorarios =
+    fondo.feeGestion != null ||
+    fondo.feeDepositaria != null ||
+    fondo.comIngreso != null ||
+    fondo.comRescate != null;
 
   return (
     <div className="bg-amauta-bg-light flex-1">
@@ -131,6 +121,11 @@ export default async function FondoDetailPage({
                 {fondo.horizonte && (
                   <span className="inline-block border border-white/30 text-white/80 text-xs font-medium px-2 py-0.5 rounded">
                     {fondo.horizonte}
+                  </span>
+                )}
+                {fondo.calificacion && (
+                  <span className="inline-block border border-white/30 text-white/80 text-xs font-medium px-2 py-0.5 rounded">
+                    {fondo.calificacion}
                   </span>
                 )}
               </div>
@@ -169,8 +164,8 @@ export default async function FondoDetailPage({
             <Kpi
               label="Hon. Gerente"
               value={
-                honorarios?.honorariosAdministracionGerente
-                  ? `${parseFloat(honorarios.honorariosAdministracionGerente).toFixed(2)}%`
+                fondo.feeGestion != null
+                  ? `${fondo.feeGestion.toFixed(2)}%`
                   : "—"
               }
             />
@@ -198,43 +193,79 @@ export default async function FondoDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {/*
-                  "Rendimiento" = simple % (igual a lo que muestra CAFCI: "Del día", "Del mes", etc.)
-                  "TNA" = tasa nominal anual desde CAFCI /ficha, o calculado como simple × (365/días)
-                */}
-                <ReturnRowFicha
+                <ReturnRow
                   label="Del día (1D)"
                   simple={fondo.ret1d}
-                  tna={rend?.day?.tna ?? fondo.tna1d}
+                  tna={fondo.tna1d}
                 />
-                <ReturnRowFicha
+                <ReturnRow
                   label="Semanal (7D)"
-                  simple={fondo.ret7d}
-                  tna={rend?.week?.tna ?? null}
+                  simple={ret7d}
+                  tna={ret7d != null ? ret7d * (365 / 7) : null}
                 />
-                <ReturnRowFicha
+                <ReturnRow
                   label="Del mes (30D)"
                   simple={fondo.ret30d}
-                  tna={rend?.month?.tna ?? fondo.tna30d}
+                  tna={fondo.tna30d}
                 />
-                <ReturnRowFicha
+                <ReturnRow
                   label="Del año (YTD)"
-                  simple={null}
-                  tna={rend?.yearToDate?.tna ?? null}
+                  simple={fondo.ytd}
+                  tna={null}
                 />
-                <ReturnRowFicha
+                <ReturnRow
                   label="Interanual (1A)"
                   simple={fondo.ret1a}
-                  tna={rend?.oneYear?.tna ?? fondo.tna1a}
+                  tna={fondo.tna1a}
                 />
               </tbody>
             </table>
           </div>
           <div className="px-4 py-2 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light bg-amauta-bg-light/30">
-            Rendimiento simple calculado sobre VCP de CAFCI ·
-            TNA = tasa nominal anual {ficha ? "oficial de CAFCI (/ficha)" : "estimada (rendimiento × 365/días)"}
+            Rendimiento simple sobre VCP diario · TNA = rendimiento × 365/días
           </div>
         </section>
+
+        {/* ── Estadísticas (vol / sharpe) — solo si tenemos detalle ── */}
+        {detalle && (detalle.volatilidad != null || detalle.sharpe != null) && (
+          <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
+            <header className="bg-amauta-dark text-white px-4 py-3">
+              <h2 className="font-extrabold text-sm uppercase tracking-wider">
+                Estadísticas de riesgo
+              </h2>
+            </header>
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-amauta-bg-light">
+              <StatCell
+                label="Volatilidad"
+                value={
+                  detalle.volatilidad != null
+                    ? `${(detalle.volatilidad * 100).toFixed(2)}%`
+                    : "—"
+                }
+              />
+              <StatCell
+                label="Sharpe"
+                value={
+                  detalle.sharpe != null ? detalle.sharpe.toFixed(2) : "—"
+                }
+              />
+              <StatCell
+                label="Días de histórico"
+                value={
+                  detalle.diasHistorico != null
+                    ? detalle.diasHistorico.toString()
+                    : "—"
+                }
+              />
+              <StatCell
+                label="Inicio histórico"
+                value={
+                  detalle.fechaInicio ? fmtDateAr(detalle.fechaInicio) : "—"
+                }
+              />
+            </div>
+          </section>
+        )}
 
         {/* ── Período Custom ── */}
         <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
@@ -336,7 +367,7 @@ export default async function FondoDetailPage({
                     </tr>
                     <tr className="border-t border-amauta-bg-light">
                       <td className="px-4 py-2 text-amauta-text-secondary">
-                        TNA estimada (simple × 365/días)
+                        TNA (simple × 365/días)
                       </td>
                       <td
                         className={`px-4 py-2 text-right tabular-nums font-semibold text-xs ${
@@ -353,11 +384,8 @@ export default async function FondoDetailPage({
           )}
         </section>
 
-        {/* ── Composición de Cartera ── */}
-        <ComposicionSection carteras={carteras} hasFicha={ficha != null} />
-
         {/* ── Honorarios ── */}
-        {honorarios && (
+        {tienHonorarios && (
           <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
             <header className="bg-amauta-dark text-white px-4 py-3">
               <h2 className="font-extrabold text-sm uppercase tracking-wider">
@@ -365,23 +393,27 @@ export default async function FondoDetailPage({
               </h2>
             </header>
             <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-amauta-bg-light">
-              <HonorarioCell
-                label="Hon. Gerente"
-                value={honorarios.honorariosAdministracionGerente}
-              />
+              <HonorarioCell label="Hon. Gerente" value={fondo.feeGestion} />
               <HonorarioCell
                 label="Hon. Depositaria"
-                value={honorarios.honorariosAdministracionDepositaria}
+                value={fondo.feeDepositaria}
               />
-              <HonorarioCell
-                label="Com. Ingreso"
-                value={honorarios.comisionIngreso}
-              />
-              <HonorarioCell
-                label="Com. Rescate"
-                value={honorarios.comisionRescate}
-              />
+              <HonorarioCell label="Com. Ingreso" value={fondo.comIngreso} />
+              <HonorarioCell label="Com. Rescate" value={fondo.comRescate} />
             </div>
+            {(fondo.honExito === "S" || fondo.plazoRescate != null) && (
+              <div className="border-t border-amauta-bg-light px-4 py-2 text-xs text-amauta-text-tertiary flex flex-wrap gap-x-6 gap-y-1">
+                {fondo.honExito === "S" && (
+                  <span>· Cobra honorario de éxito</span>
+                )}
+                {fondo.plazoRescate != null && (
+                  <span>
+                    · Plazo de rescate: {fondo.plazoRescate}{" "}
+                    {fondo.plazoRescate === 1 ? "día hábil" : "días hábiles"}
+                  </span>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -393,7 +425,6 @@ export default async function FondoDetailPage({
           >
             Comparar este fondo →
           </Link>
-          {/* PDF download — plain <a> triggers browser download, no JS needed */}
           <a
             href={`/api/fondo/pdf?key=${encodeURIComponent(fondo.key)}`}
             download
@@ -438,8 +469,7 @@ function Kpi({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Row: Rendimiento simple primero (igual a CAFCI web), TNA como dato secundario. */
-function ReturnRowFicha({
+function ReturnRow({
   label,
   simple,
   tna,
@@ -453,13 +483,11 @@ function ReturnRowFicha({
   return (
     <tr className="border-t border-amauta-bg-light">
       <td className="px-4 py-3 text-amauta-text-secondary">{label}</td>
-      {/* Rendimiento simple — misma unidad que CAFCI muestra en su web */}
       <td
         className={`px-4 py-3 text-right tabular-nums font-semibold ${simpleFmt.colorClass}`}
       >
         {simpleFmt.text}
       </td>
-      {/* TNA — referencia anualizada estándar argentina */}
       <td
         className={`px-4 py-3 text-right tabular-nums text-xs ${tnaFmt.colorClass}`}
       >
@@ -469,99 +497,33 @@ function ReturnRowFicha({
   );
 }
 
-function HonorarioCell({ label, value }: { label: string; value?: string }) {
-  const num = value ? parseFloat(value) : null;
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-4 py-3 text-center">
+      <p className="text-xs text-amauta-text-tertiary uppercase tracking-wider mb-1">
+        {label}
+      </p>
+      <p className="font-bold text-amauta-bordo tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function HonorarioCell({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | null | undefined;
+}) {
   return (
     <div className="px-4 py-3 text-center">
       <p className="text-xs text-amauta-text-tertiary uppercase tracking-wider mb-1">
         {label}
       </p>
       <p className="font-bold text-amauta-bordo tabular-nums">
-        {num != null && !isNaN(num) ? `${num.toFixed(2)}%` : "—"}
+        {value != null ? `${value.toFixed(2)}%` : "—"}
       </p>
     </div>
-  );
-}
-
-function ComposicionSection({
-  carteras,
-  hasFicha,
-}: {
-  carteras: CartHolding[] | null;
-  hasFicha: boolean;
-}) {
-  const COLORS = [
-    "bg-amauta-bordo",
-    "bg-amauta-yellow",
-    "bg-blue-500",
-    "bg-emerald-500",
-    "bg-purple-500",
-    "bg-orange-500",
-    "bg-teal-500",
-    "bg-pink-500",
-    "bg-indigo-500",
-    "bg-amber-400",
-  ];
-
-  return (
-    <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
-      <header className="bg-amauta-dark text-white px-4 py-3 flex items-center justify-between">
-        <h2 className="font-extrabold text-sm uppercase tracking-wider">
-          Composición de Cartera
-        </h2>
-        <span className="text-xs text-white/50">CAFCI Live</span>
-      </header>
-
-      {!hasFicha ? (
-        <div className="px-4 py-8 text-center text-amauta-text-tertiary text-sm">
-          <div className="text-3xl mb-2">📊</div>
-          <p className="font-medium">Ficha no disponible</p>
-          <p className="mt-1 text-xs">
-            No se pudo resolver el fondoId/claseId para este fondo.
-          </p>
-        </div>
-      ) : !carteras || carteras.length === 0 ? (
-        <div className="px-4 py-8 text-center text-amauta-text-tertiary text-sm">
-          <div className="text-3xl mb-2">📊</div>
-          <p className="font-medium">Composición no disponible</p>
-          <p className="mt-1 text-xs">
-            CAFCI no publicó la cartera semanal para este fondo aún.
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Horizontal bar chart — top 10 holdings */}
-          <div className="px-4 pt-4 pb-4">
-            {carteras.slice(0, 10).map((h, i) => (
-              <div key={i} className="mb-3">
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-medium text-amauta-text-secondary truncate max-w-[72%]">
-                    {h.nombreActivo}
-                    {h.tipoActivo && (
-                      <span className="ml-2 px-1.5 py-0.5 rounded bg-amauta-bg-light text-amauta-text-tertiary font-normal">
-                        {h.tipoActivo}
-                      </span>
-                    )}
-                  </span>
-                  <span className="tabular-nums font-bold text-amauta-bordo">
-                    {fmtNumber(h.share, 2)}%
-                  </span>
-                </div>
-                <div className="h-2 bg-amauta-bg-light rounded-full overflow-hidden">
-                  <div
-                    className={`h-full ${COLORS[i % COLORS.length]} rounded-full`}
-                    style={{ width: `${Math.min(h.share, 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="px-4 pb-3 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light pt-2">
-            Composición semanal · Fuente: CAFCI. Verificar con la fuente oficial.
-          </p>
-        </>
-      )}
-    </section>
   );
 }
 

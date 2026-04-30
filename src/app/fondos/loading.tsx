@@ -1,6 +1,6 @@
 /**
  * Loading skeleton for /fondos — shown instantly on click while the page
- * fetches data from CAFCI (Next.js App Router streaming).
+ * fetches data (Next.js App Router streaming).
  */
 export default function FondosLoading() {
   return (

@@ -20,8 +20,8 @@ export default function GlobalError({
           Algo salió mal
         </h1>
         <p className="mt-2 text-sm text-amauta-text-secondary">
-          {error?.message?.includes("CAFCI")
-            ? "No se pudo conectar con CAFCI. Intentá de nuevo en unos minutos."
+          {error?.message?.includes("fonditos") || error?.message?.includes("HTTP")
+            ? "No pudimos cargar los datos de fondos. Intentá de nuevo en unos minutos."
             : "Ocurrió un error inesperado. Por favor recargá la página."}
         </p>
         <button

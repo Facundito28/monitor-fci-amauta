@@ -14,7 +14,7 @@ const firaSans = Fira_Sans({
 export const metadata: Metadata = {
   title: "Monitor FCIs | Amauta Inversiones",
   description:
-    "Plataforma de consulta y comparación de Fondos Comunes de Inversión argentinos. Datos diarios de CAFCI con análisis profesional de Amauta Inversiones Financieras.",
+    "Plataforma de consulta y comparación de Fondos Comunes de Inversión argentinos. Datos diarios con análisis profesional de Amauta Inversiones Financieras.",
 };
 
 export default function RootLayout({
@@ -108,14 +108,14 @@ function Footer() {
         <div>
           <h4 className="text-white font-bold mb-2">Datos</h4>
           <p className="text-xs leading-relaxed">
-            Fuente: <a href="https://www.cafci.org.ar/" target="_blank" rel="noreferrer" className="hover:text-amauta-yellow underline">CAFCI</a>. Actualización diaria post-cierre de mercado.
+            Datos de <a href="https://www.cafci.org.ar/" target="_blank" rel="noreferrer" className="hover:text-amauta-yellow underline">CAFCI</a> procesados por <a href="https://fonditos.ar/" target="_blank" rel="noreferrer" className="hover:text-amauta-yellow underline">fonditos.ar</a>. Actualización diaria post-cierre.
           </p>
         </div>
       </div>
 
       <div className="border-t border-white/10">
         <div className="max-w-7xl mx-auto px-6 py-4 text-[11px] leading-relaxed text-white/60">
-          Este material es preparado por <strong className="text-white/80">Amauta Inversiones Financieras</strong> (Matrícula CNV 1029) con fines informativos y no constituye una recomendación de inversión. Rentabilidades pasadas no garantizan resultados futuros. Datos provistos por CAFCI; verificar siempre con la fuente oficial. © {new Date().getFullYear()} Amauta Inversiones Financieras.
+          Este material es preparado por <strong className="text-white/80">Amauta Inversiones Financieras</strong> (Matrícula CNV 1029) con fines informativos y no constituye una recomendación de inversión. Rentabilidades pasadas no garantizan resultados futuros. Datos provistos por CAFCI vía fonditos.ar; verificar siempre con la fuente oficial. © {new Date().getFullYear()} Amauta Inversiones Financieras.
         </div>
       </div>
     </footer>

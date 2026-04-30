@@ -6,8 +6,8 @@
  */
 import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
-import type { EnrichedRow } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
+import type { EnrichedRow } from "@/lib/fondos/enriched";
 
 const MAX_FONDOS = 4;
 
@@ -45,7 +45,7 @@ export default async function CompararPage({
       <div className="flex-1 flex items-center justify-center bg-amauta-bg-light">
         <div className="bg-white rounded-lg p-8 text-center">
           <p className="text-amauta-text-secondary">
-            No se pudo conectar con CAFCI. Volvé a intentar en unos minutos.
+            No pudimos cargar los datos de fondos. Volvé a intentar en unos minutos.
           </p>
         </div>
       </div>
@@ -314,8 +314,8 @@ export default async function CompararPage({
               </table>
             </div>
             <div className="border-t border-amauta-bg-light bg-amauta-bg-light/30 px-4 py-3 text-xs text-amauta-text-tertiary">
-              Rendimientos calculados sobre VCP de CAFCI · Hacé click en el nombre del fondo para ver la ficha completa ·{" "}
-              <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos, verificar en CAFCI
+              Rendimientos calculados sobre VCP diario · Hacé click en el nombre del fondo para ver la ficha completa ·{" "}
+              <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos, verificar con la fuente oficial
             </div>
           </div>
         )}
@@ -401,7 +401,7 @@ function ComparisonReturnRow({
             className={`px-3 py-2 text-right tabular-nums font-semibold ${fmt.colorClass} ${
               isBest ? "bg-amauta-yellow/10" : ""
             }`}
-            title={fmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+            title={fmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
           >
             {fmt.text}
             {isBest && !fmt.isOutlier && (

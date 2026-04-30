@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { fmtCompactCurrency } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshot } from "@/lib/fondos/enriched";
 
-// Live snapshot — refresh on each request (CAFCI dedups inside the request).
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
@@ -20,7 +19,7 @@ export default async function Home() {
         <div className="max-w-7xl mx-auto px-6 py-20 sm:py-28 grid gap-10 lg:grid-cols-2 items-center">
           <div>
             <span className="inline-block bg-amauta-yellow text-amauta-dark text-xs font-bold uppercase tracking-wider px-3 py-1 rounded">
-              Beta · CAFCI Live Data
+              Beta · Datos diarios
             </span>
             <h1 className="mt-4 text-4xl sm:text-5xl font-extrabold leading-tight tracking-tight">
               Monitor de Fondos Comunes de Inversión
@@ -109,7 +108,7 @@ export default async function Home() {
             />
             <Feature
               title="Ficha completa de cada fondo"
-              body="VCP, composición de cartera semanal, honorarios y rendimientos oficiales de CAFCI en una sola vista."
+              body="VCP, AUM, honorarios, rendimientos históricos y volatilidad — todo lo que mirás antes de recomendar un fondo."
               href="/fondos"
             />
             <Feature
