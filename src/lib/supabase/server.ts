@@ -6,34 +6,42 @@
  *     Use this for any server component that just queries fci_* data.
  *   - adminClient():  uses SUPABASE_SERVICE_ROLE_KEY. Bypasses RLS.
  *     Use ONLY in protected route handlers (cron, admin endpoints).
+ *
+ * Validation is intentionally lazy (inside each function, not at module load)
+ * so that simply importing this file does NOT crash the build. Vercel
+ * "collects page data" by evaluating route modules at build time; if env
+ * vars are missing then we'd fail the deploy even when the route is fine.
  */
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./database.types";
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_URL || !PUBLISHABLE_KEY) {
-  // Surfaces clearly during build/start if env is missing on Vercel.
-  throw new Error(
-    "Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY env vars",
-  );
-}
-
 export function publicClient() {
-  return createClient<Database>(SUPABASE_URL!, PUBLISHABLE_KEY!, {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY env vars",
+    );
+  }
+  return createClient<Database>(url, key, {
     auth: { persistSession: false },
   });
 }
 
 export function adminClient() {
-  if (!SERVICE_ROLE_KEY) {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url) {
     throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is not set — admin operations cannot run",
+      "Missing NEXT_PUBLIC_SUPABASE_URL — cannot create admin client",
     );
   }
-  return createClient<Database>(SUPABASE_URL!, SERVICE_ROLE_KEY, {
+  if (!key) {
+    throw new Error(
+      "Missing SUPABASE_SERVICE_ROLE_KEY — admin operations cannot run",
+    );
+  }
+  return createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
