@@ -6,8 +6,8 @@
  */
 import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
-import type { EnrichedRow } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
+import type { EnrichedRow } from "@/lib/fondos/enriched";
 
 const MAX_FONDOS = 4;
 
@@ -45,7 +45,7 @@ export default async function CompararPage({
       <div className="flex-1 flex items-center justify-center bg-amauta-bg-light">
         <div className="bg-white rounded-lg p-8 text-center">
           <p className="text-amauta-text-secondary">
-            No se pudo conectar con CAFCI. Volvé a intentar en unos minutos.
+            No pudimos cargar los datos de fondos. Volvé a intentar en unos minutos.
           </p>
         </div>
       </div>
@@ -83,14 +83,10 @@ export default async function CompararPage({
     <div className="bg-amauta-bg-light flex-1">
       <div className="max-w-7xl mx-auto px-6 py-10">
         <div className="mb-6">
-          <span className="text-[11px] uppercase tracking-[0.18em] text-amauta-bordo font-bold">
-            Plataforma · Comparador
-          </span>
-          <h1 className="mt-2 text-3xl font-extrabold text-amauta-text">
+          <h1 className="text-3xl font-extrabold text-amauta-bordo">
             Comparador de fondos
           </h1>
-          <span className="amauta-rule mt-3" />
-          <p className="mt-3 text-sm text-amauta-text-secondary">
+          <p className="mt-1 text-sm text-amauta-text-secondary">
             Hasta {MAX_FONDOS} clases lado a lado · cierre{" "}
             {fmtDateAr(snap.fecha)} · permalink compartible
           </p>
@@ -279,21 +275,21 @@ export default async function CompararPage({
                     outlierThreshold={5}
                   />
                   <ComparisonReturnRow
-                    label="Rend. 7D"
+                    label="Rend. MTD"
                     rows={selected}
-                    get={(r) => r.ret7d}
-                    outlierThreshold={15}
-                  />
-                  <ComparisonReturnRow
-                    label="Rend. 30D"
-                    rows={selected}
-                    get={(r) => r.ret30d}
+                    get={(r) => r.retMTD}
                     outlierThreshold={35}
                   />
                   <ComparisonReturnRow
-                    label="Rend. 1A"
+                    label="Rend. YTD"
                     rows={selected}
-                    get={(r) => r.ret1a}
+                    get={(r) => r.ytd}
+                    outlierThreshold={100}
+                  />
+                  <ComparisonReturnRow
+                    label="Rend. 13M"
+                    rows={selected}
+                    get={(r) => r.ret13m}
                     outlierThreshold={150}
                   />
 
@@ -318,8 +314,8 @@ export default async function CompararPage({
               </table>
             </div>
             <div className="border-t border-amauta-bg-light bg-amauta-bg-light/30 px-4 py-3 text-xs text-amauta-text-tertiary">
-              Rendimientos calculados sobre VCP de CAFCI · Hacé click en el nombre del fondo para ver la ficha completa ·{" "}
-              <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos, verificar en CAFCI
+              Rendimientos calculados sobre VCP diario · Hacé click en el nombre del fondo para ver la ficha completa ·{" "}
+              <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos, verificar con la fuente oficial
             </div>
           </div>
         )}
@@ -405,7 +401,7 @@ function ComparisonReturnRow({
             className={`px-3 py-2 text-right tabular-nums font-semibold ${fmt.colorClass} ${
               isBest ? "bg-amauta-yellow/10" : ""
             }`}
-            title={fmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+            title={fmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
           >
             {fmt.text}
             {isBest && !fmt.isOutlier && (
