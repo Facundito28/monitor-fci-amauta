@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { fmtCompactCurrency } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshot } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshot } from "@/lib/fondos/enriched";
 
-// Render dinámico: evita pre-render en build (CAFCI puede dar timeout durante build).
-// El speedup viene del Data Cache de Vercel: el cliente CAFCI usa next.revalidate=600,
-// así que el 1er hit hace fetch real y los siguientes 10min son instantáneos.
+// Render dinámico: evita pre-render en build (la descarga del Excel CAFCI puede
+// tardar varios segundos). El cliente cachea la planilla parseada en memoria 6h,
+// así que el 1er hit por instancia descarga el .xlsx y los siguientes son instantáneos.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
@@ -36,7 +36,7 @@ export default async function Home() {
           <div>
             <span className="inline-flex items-center gap-2 bg-amauta-yellow text-amauta-dark text-[11px] font-bold uppercase tracking-[0.18em] px-3 py-1.5 rounded-xs">
               <span className="w-1.5 h-1.5 rounded-full bg-amauta-dark animate-pulse" />
-              Beta · CAFCI Live Data
+              Beta · Datos diarios
             </span>
 
             <h1 className="mt-6 text-4xl sm:text-5xl font-extrabold leading-[1.05] tracking-tight">
@@ -133,8 +133,8 @@ export default async function Home() {
             />
             <Feature
               n="02"
-              title="Rendimiento por período"
-              body="Elegí fecha inicio y fecha fin en cualquier fondo y calculá el rendimiento real del período con TNA estimada."
+              title="Rendimientos pre-calculados"
+              body="1D, mes en curso (MTD), año en curso (YTD) e interanual (13M) con TNA — los mismos valores que publica CAFCI en su planilla diaria."
               href="/fondos"
             />
             <Feature
@@ -152,7 +152,7 @@ export default async function Home() {
             <Feature
               n="05"
               title="Ficha completa de cada fondo"
-              body="VCP, composición de cartera semanal, honorarios y rendimientos oficiales de CAFCI en una sola vista."
+              body="VCP, AUM, honorarios, rendimientos históricos y calificación crediticia — todo lo que mirás antes de recomendar un fondo."
               href="/fondos"
             />
             <Feature

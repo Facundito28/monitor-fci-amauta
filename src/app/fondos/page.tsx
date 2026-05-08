@@ -2,11 +2,10 @@
  * Listado completo de FCIs (clases) con VCP, patrimonio y rendimientos.
  *
  * Filtros sincronizados con la URL (permalinks compartibles).
- * Datos: CAFCI live con rendimiento simple 1D / 30D / 1A.
  */
 import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
 
 const PAGE_SIZE = 50;
 
@@ -56,7 +55,7 @@ export default async function FondosPage({
 
   if (!snap) {
     return (
-      <ErrorState message="No pudimos contactar a CAFCI. Volvé a intentar en unos minutos." />
+      <ErrorState message="No pudimos cargar los datos de fondos. Volvé a intentar en unos minutos." />
     );
   }
 
@@ -127,21 +126,17 @@ export default async function FondosPage({
       <div className="max-w-7xl mx-auto px-6 py-10">
         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
           <div>
-            <span className="text-[11px] uppercase tracking-[0.18em] text-amauta-bordo font-bold">
-              Plataforma · Listado
-            </span>
-            <h1 className="mt-2 text-3xl font-extrabold text-amauta-text">
+            <h1 className="text-3xl font-extrabold text-amauta-bordo">
               Fondos Comunes de Inversión
             </h1>
-            <span className="amauta-rule mt-3" />
-            <p className="mt-3 text-sm text-amauta-text-secondary">
+            <p className="mt-1 text-sm text-amauta-text-secondary">
               {total.toLocaleString("es-AR")} clases · cierre{" "}
-              {fmtDateAr(snap.fecha)} · datos en vivo de{" "}
+              {fmtDateAr(snap.fecha)} · planilla diaria oficial de{" "}
               <a
                 href="https://www.cafci.org.ar/"
                 target="_blank"
                 rel="noreferrer"
-                className="underline underline-offset-2 hover:text-amauta-bordo"
+                className="underline hover:text-amauta-bordo"
               >
                 CAFCI
               </a>
@@ -250,14 +245,14 @@ export default async function FondosPage({
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. 30D"
+                    label="Rend. MTD"
                     baseKey="ret30d"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. 1A"
+                    label="Rend. 13M"
                     baseKey="ret1a"
                     activeSort={sortKey}
                     buildHref={buildHref}
@@ -328,19 +323,19 @@ export default async function FondosPage({
                         </td>
                         <td
                           className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret1d.colorClass}`}
-                          title={ret1d.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+                          title={ret1d.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
                         >
                           {ret1d.text}
                         </td>
                         <td
                           className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret30d.colorClass}`}
-                          title={ret30d.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+                          title={ret30d.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
                         >
                           {ret30d.text}
                         </td>
                         <td
                           className={`px-3 py-3 text-right tabular-nums whitespace-nowrap ${ret1a.colorClass}`}
-                          title={ret1a.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+                          title={ret1a.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
                         >
                           {ret1a.text}
                         </td>
@@ -386,10 +381,10 @@ export default async function FondosPage({
         </div>
 
         <p className="mt-4 text-xs text-amauta-text-tertiary">
-          Rend. 1D / 30D / 1A = rendimiento simple del período (igual a CAFCI) ·
+          MTD = mes en curso (desde fin de mes anterior) · 13M = vs misma fecha del año anterior ·
           Hacé click en ↕ para ordenar · Hacé click en el nombre para ver la ficha completa ·{" "}
           <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos
-          (corrección de VCP o distribución), verificar en CAFCI
+          (corrección de VCP o distribución), verificar con la fuente oficial
         </p>
       </div>
     </div>

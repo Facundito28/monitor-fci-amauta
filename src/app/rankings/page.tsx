@@ -1,23 +1,24 @@
 ﻿/**
  * Rankings de FCIs por rendimiento y categoría.
  *
- * Período seleccionable en URL: ?periodo=1d | 7d | 30d | 1a
+ * Período seleccionable en URL: ?periodo=1d | mtd | ytd | 13m
  * Top 10 por rendimiento del período elegido dentro de cada categoría.
+ * Datos: planilla diaria oficial de CAFCI (variaciones pre-calculadas).
  */
 import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
-import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/cafci/enriched";
-import type { EnrichedRow } from "@/lib/cafci/enriched";
+import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
+import type { EnrichedRow } from "@/lib/fondos/enriched";
 
 const TOP_N = 10;
 
-type Periodo = "1d" | "7d" | "30d" | "1a";
+type Periodo = "1d" | "mtd" | "ytd" | "13m";
 
 const PERIODOS: { key: Periodo; label: string; field: keyof EnrichedRow; outlierThreshold: number }[] = [
-  { key: "1d",  label: "Diario (1D)",       field: "ret1d",  outlierThreshold: 5   },
-  { key: "7d",  label: "Semanal (7D)",      field: "ret7d",  outlierThreshold: 15  },
-  { key: "30d", label: "Mensual (30D)",     field: "ret30d", outlierThreshold: 35  },
-  { key: "1a",  label: "Interanual (1A)",   field: "ret1a",  outlierThreshold: 150 },
+  { key: "1d",  label: "Diario (1D)",        field: "ret1d",  outlierThreshold: 5   },
+  { key: "mtd", label: "Mes en curso (MTD)", field: "retMTD", outlierThreshold: 35  },
+  { key: "ytd", label: "Año en curso (YTD)", field: "ytd",    outlierThreshold: 100 },
+  { key: "13m", label: "Interanual (13M)",   field: "ret13m", outlierThreshold: 150 },
 ];
 
 interface SearchParams {
@@ -40,11 +41,11 @@ export default async function RankingsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const sp = await searchParams;
-  const periodo = (sp.periodo as Periodo) ?? "30d";
+  const periodo = (sp.periodo as Periodo) ?? "mtd";
   const catFilter = (sp.cat ?? "").trim();
 
-  const validPeriodo = PERIODOS.find((p) => p.key === periodo) ? periodo : "30d";
-  const periodoConfig = PERIODOS.find((p) => p.key === validPeriodo) ?? PERIODOS[2];
+  const validPeriodo = PERIODOS.find((p) => p.key === periodo) ? periodo : "mtd";
+  const periodoConfig = PERIODOS.find((p) => p.key === validPeriodo) ?? PERIODOS[1];
 
   const snap = await getMarketSnapshotWithReturns().catch(() => null);
 
@@ -53,7 +54,7 @@ export default async function RankingsPage({
       <div className="flex-1 flex items-center justify-center bg-amauta-bg-light">
         <div className="bg-white rounded-lg p-8 text-center">
           <p className="text-amauta-text-secondary">
-            No se pudo conectar con CAFCI. Volvé a intentar en unos minutos.
+            No pudimos cargar los datos de fondos. Volvé a intentar en unos minutos.
           </p>
         </div>
       </div>
@@ -107,14 +108,10 @@ export default async function RankingsPage({
     <div className="bg-amauta-bg-light flex-1">
       <div className="max-w-7xl mx-auto px-6 py-10">
         <div className="mb-6">
-          <span className="text-[11px] uppercase tracking-[0.18em] text-amauta-bordo font-bold">
-            Plataforma · Rankings
-          </span>
-          <h1 className="mt-2 text-3xl font-extrabold text-amauta-text">
+          <h1 className="text-3xl font-extrabold text-amauta-bordo">
             Rankings de fondos
           </h1>
-          <span className="amauta-rule mt-3" />
-          <p className="mt-3 text-sm text-amauta-text-secondary">
+          <p className="mt-1 text-sm text-amauta-text-secondary">
             Top {TOP_N} por rendimiento en el período seleccionado · cierre{" "}
             {fmtDateAr(snap.fecha)}
           </p>
@@ -187,9 +184,9 @@ export default async function RankingsPage({
         )}
 
         <p className="mt-6 text-xs text-amauta-text-tertiary">
-          Rendimientos calculados sobre VCP de CAFCI ·{" "}
+          Rendimientos calculados sobre VCP diario ·{" "}
           <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos
-          (corrección de VCP o distribución), verificar en CAFCI
+          (corrección de VCP o distribución), verificar con la fuente oficial
         </p>
       </div>
     </div>
@@ -269,7 +266,7 @@ function CategoryCard({
                 </td>
                 <td
                   className={`px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold ${retFmt.colorClass}`}
-                  title={retFmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar en CAFCI." : undefined}
+                  title={retFmt.isOutlier ? "Posible artefacto de datos (corrección de VCP o distribución). Verificar con la fuente oficial." : undefined}
                 >
                   {retFmt.text}
                 </td>
