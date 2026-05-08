@@ -12,6 +12,7 @@ import {
   getMarketSnapshotWithReturns,
 } from "@/lib/fondos/enriched";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
+import { EstrategiaBadge } from "@/components/EstrategiaBadge";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -65,7 +66,8 @@ export default async function FondoDetailPage({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap gap-2 mb-2">
-                {fondo.categoria && (
+                <EstrategiaBadge value={fondo.estrategia} />
+                {fondo.categoria && fondo.categoria !== fondo.estrategia && (
                   <span className="inline-block bg-amauta-yellow text-amauta-dark text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded">
                     {fondo.categoria}
                   </span>
@@ -182,6 +184,54 @@ export default async function FondoDetailPage({
             Variaciones pre-calculadas por CAFCI · Mensual = desde fin de mes anterior · Interanual = vs misma fecha del año anterior · TNA = rendimiento × 365/días
           </div>
         </section>
+
+        {/* ── Composición de Cartera ── */}
+        {fondo.cartera.length > 0 && (
+          <section className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden mb-6">
+            <header className="bg-amauta-dark text-white px-4 py-3 flex items-center justify-between gap-3">
+              <h2 className="font-extrabold text-sm uppercase tracking-wider">
+                Composición de Cartera
+              </h2>
+              <span className="text-xs text-white/50 font-medium">
+                Top {fondo.cartera.length} activos
+              </span>
+            </header>
+            <div className="px-4 py-4 space-y-2">
+              {fondo.cartera.map((h) => {
+                const tipoStyle = TIPO_BAR_COLOR[h.tipo_activo] ?? "bg-slate-400";
+                return (
+                  <div key={h.rank} className="flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm mb-1">
+                        <span className="font-medium text-amauta-text truncate">
+                          {h.activo}
+                        </span>
+                        <span
+                          className="inline-block text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded text-amauta-text-secondary bg-amauta-bg-light shrink-0"
+                          title={`Tipo de activo: ${h.tipo_activo}`}
+                        >
+                          {h.tipo_activo}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-amauta-bg-light rounded-full overflow-hidden">
+                        <div
+                          className={`h-full ${tipoStyle}`}
+                          style={{ width: `${Math.min(100, h.share)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-amauta-bordo whitespace-nowrap w-14 text-right">
+                      {h.share.toFixed(2)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t border-amauta-bg-light bg-amauta-bg-light/30 px-4 py-2 text-xs text-amauta-text-tertiary">
+              Composición semanal · Fuente: <a href="https://www.cafci.org.ar/" target="_blank" rel="noreferrer" className="underline hover:text-amauta-bordo">CAFCI</a>
+            </div>
+          </section>
+        )}
 
         {/* ── Honorarios ── */}
         {tienHonorarios && (
@@ -314,6 +364,37 @@ function HonorarioCell({
     </div>
   );
 }
+
+/**
+ * Colores Tailwind para las barras de la composición de cartera, agrupadas
+ * por tipo_activo (output de cartera-client.ts:classifyActivo).
+ *
+ * Mapeo intuitivo: liquidez = verdes, ARS soberano = azules/violetas, USD =
+ * cian/índigo, equity = naranja, otros = grises.
+ */
+const TIPO_BAR_COLOR: Record<string, string> = {
+  // Cash equivalents — tonos verdes
+  "Plazo Fijo":   "bg-emerald-400",
+  "Cta Cte":      "bg-emerald-300",
+  "Caución":      "bg-teal-400",
+  "Cheque":       "bg-teal-300",
+  // Soberano ARS tasa fija — azules
+  "Lecap":        "bg-blue-500",
+  "Bonte":        "bg-blue-400",
+  // Soberano ARS CER — violetas
+  "Lecer":        "bg-purple-500",
+  "Boncer":       "bg-purple-400",
+  // ARS atado al USD — ámbar
+  "Dólar Linked": "bg-amber-400",
+  // USD — cian / índigo
+  "Hard USD":     "bg-cyan-500",
+  "ON":           "bg-indigo-400",
+  // Equity / FCI / agregado / otros — grises y naranjas
+  "Acciones":     "bg-orange-400",
+  "FCI":          "bg-pink-300",
+  "Resto":        "bg-slate-300",
+  "Otros":        "bg-slate-400",
+};
 
 function ErrorState({ message }: { message: string }) {
   return (

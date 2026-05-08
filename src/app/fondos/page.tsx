@@ -6,12 +6,14 @@
 import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
+import { EstrategiaBadge } from "@/components/EstrategiaBadge";
 
 const PAGE_SIZE = 50;
 
 interface SearchParams {
   q?: string;
   cat?: string;
+  estrategia?: string;
   gestora?: string;
   horizonte?: string;
   moneda?: string;
@@ -45,6 +47,7 @@ export default async function FondosPage({
   const sp = await searchParams;
   const query = (sp.q ?? "").trim();
   const catFilter = (sp.cat ?? "").trim();
+  const estrategiaFilter = (sp.estrategia ?? "").trim();
   const gestoraFilter = (sp.gestora ?? "").trim();
   const horizonteFilter = (sp.horizonte ?? "").trim();
   const monedaFilter = (sp.moneda ?? "").trim();
@@ -64,6 +67,7 @@ export default async function FondosPage({
     if (query && !r.displayName.toLowerCase().includes(query.toLowerCase()))
       return false;
     if (catFilter && r.categoria !== catFilter) return false;
+    if (estrategiaFilter && r.estrategia !== estrategiaFilter) return false;
     if (gestoraFilter && r.gestora !== gestoraFilter) return false;
     if (horizonteFilter && r.horizonte !== horizonteFilter) return false;
     if (monedaFilter && r.moneda !== monedaFilter) return false;
@@ -102,6 +106,7 @@ export default async function FondosPage({
     const merged: Record<string, string | undefined> = {
       q: query,
       cat: catFilter,
+      estrategia: estrategiaFilter,
       gestora: gestoraFilter,
       horizonte: horizonteFilter,
       moneda: monedaFilter,
@@ -118,7 +123,7 @@ export default async function FondosPage({
     return qs ? `/fondos?${qs}` : "/fondos";
   };
 
-  const anyFilter = !!(query || catFilter || gestoraFilter || horizonteFilter || monedaFilter);
+  const anyFilter = !!(query || catFilter || estrategiaFilter || gestoraFilter || horizonteFilter || monedaFilter);
   const horizonteOpts = ["Corto Plazo", "Mediano Plazo", "Largo Plazo"];
 
   return (
@@ -145,7 +150,7 @@ export default async function FondosPage({
         </div>
 
         {/* ── Filtros ── */}
-        <form className="bg-white rounded-lg border border-amauta-bg-light p-4 mb-6 grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto] items-end">
+        <form className="bg-white rounded-lg border border-amauta-bg-light p-4 mb-6 grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto_auto] items-end">
           <div>
             <label
               htmlFor="q"
@@ -162,6 +167,12 @@ export default async function FondosPage({
               className="w-full rounded-md border border-amauta-bg-light bg-white px-3 py-2 text-sm focus:outline-none focus:border-amauta-yellow focus:ring-2 focus:ring-amauta-yellow/30"
             />
           </div>
+          <SelectFilter
+            id="estrategia"
+            label="Estrategia"
+            value={estrategiaFilter}
+            options={snap.estrategias}
+          />
           <SelectFilter
             id="cat"
             label="Categoría"
@@ -188,7 +199,7 @@ export default async function FondosPage({
             allLabel="Todas"
           />
           <input type="hidden" name="sort" value={sortKey} />
-          <div className="flex gap-2 md:col-span-5">
+          <div className="flex gap-2 md:col-span-6">
             <button
               type="submit"
               className="rounded-md bg-amauta-yellow text-amauta-dark font-bold px-5 py-2 text-sm hover:bg-amauta-yellow-hover transition-colors"
@@ -220,7 +231,7 @@ export default async function FondosPage({
                     buildHref={buildHref}
                     align="left"
                   />
-                  <th className="px-3 py-3 text-left font-bold">Categoría</th>
+                  <th className="px-3 py-3 text-left font-bold">Estrategia</th>
                   <th className="px-3 py-3 text-left font-bold">Gestora</th>
                   <th className="px-3 py-3 text-left font-bold">Moneda</th>
                   <SortableHeader
@@ -292,8 +303,8 @@ export default async function FondosPage({
                             {r.displayName}
                           </Link>
                         </td>
-                        <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
-                          {r.categoria ?? "—"}
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <EstrategiaBadge value={r.estrategia} />
                         </td>
                         <td className="px-3 py-3 text-amauta-text-secondary whitespace-nowrap">
                           {r.gestora ?? "—"}
@@ -510,3 +521,4 @@ function ErrorState({ message }: { message: string }) {
     </div>
   );
 }
+

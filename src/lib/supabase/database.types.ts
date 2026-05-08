@@ -16,6 +16,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      fci_cartera: {
+        Row: {
+          activo: string
+          fecha_snapshot: string
+          fondo_id: number
+          rank: number
+          share: number
+          tipo_activo: string | null
+        }
+        Insert: {
+          activo: string
+          fecha_snapshot: string
+          fondo_id: number
+          rank: number
+          share: number
+          tipo_activo?: string | null
+        }
+        Update: {
+          activo?: string
+          fecha_snapshot?: string
+          fondo_id?: number
+          rank?: number
+          share?: number
+          tipo_activo?: string | null
+        }
+        Relationships: []
+      }
       fci_categoria: {
         Row: {
           codigo_cafci: string | null
@@ -95,6 +122,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fci_estrategia_override: {
+        Row: {
+          codigo_cafci: number
+          estrategia: string
+          nota: string | null
+          updated_at: string
+        }
+        Insert: {
+          codigo_cafci: number
+          estrategia: string
+          nota?: string | null
+          updated_at?: string
+        }
+        Update: {
+          codigo_cafci?: number
+          estrategia?: string
+          nota?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       fci_fondo: {
         Row: {
@@ -177,6 +225,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      fci_fondo_meta: {
+        Row: {
+          benchmark: string | null
+          clase_nombre: string
+          codigo_cafci_clase: number
+          duration: string | null
+          fondo_id: number
+          fondo_nombre: string
+          horizonte: string | null
+          inicio: string | null
+          mm_puro: boolean | null
+          region: string | null
+          tipo_renta_id: number | null
+          tipo_renta_nombre: string | null
+          updated_at: string
+        }
+        Insert: {
+          benchmark?: string | null
+          clase_nombre: string
+          codigo_cafci_clase: number
+          duration?: string | null
+          fondo_id: number
+          fondo_nombre: string
+          horizonte?: string | null
+          inicio?: string | null
+          mm_puro?: boolean | null
+          region?: string | null
+          tipo_renta_id?: number | null
+          tipo_renta_nombre?: string | null
+          updated_at?: string
+        }
+        Update: {
+          benchmark?: string | null
+          clase_nombre?: string
+          codigo_cafci_clase?: number
+          duration?: string | null
+          fondo_id?: number
+          fondo_nombre?: string
+          horizonte?: string | null
+          inicio?: string | null
+          mm_puro?: boolean | null
+          region?: string | null
+          tipo_renta_id?: number | null
+          tipo_renta_nombre?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       fci_gestora: {
         Row: {

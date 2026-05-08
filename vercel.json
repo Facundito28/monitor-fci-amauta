@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/snapshot-cafci",
       "schedule": "30 22 * * 1-5"
+    },
+    {
+      "path": "/api/cron/snapshot-carteras",
+      "schedule": "0 23 * * 0"
     }
   ]
 }

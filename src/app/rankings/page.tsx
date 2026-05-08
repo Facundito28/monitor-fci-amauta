@@ -23,6 +23,8 @@ const PERIODOS: { key: Periodo; label: string; field: keyof EnrichedRow; outlier
 
 interface SearchParams {
   periodo?: string;
+  estrategia?: string;
+  /** @deprecated — still accepted for legacy permalinks. */
   cat?: string;
 }
 
@@ -42,7 +44,9 @@ export default async function RankingsPage({
 }) {
   const sp = await searchParams;
   const periodo = (sp.periodo as Periodo) ?? "mtd";
-  const catFilter = (sp.cat ?? "").trim();
+  // estrategia is the new grouping axis; `cat` is kept for legacy permalinks.
+  const estrategiaFilter = (sp.estrategia ?? "").trim();
+  const legacyCatFilter = (sp.cat ?? "").trim();
 
   const validPeriodo = PERIODOS.find((p) => p.key === periodo) ? periodo : "mtd";
   const periodoConfig = PERIODOS.find((p) => p.key === validPeriodo) ?? PERIODOS[1];
@@ -64,25 +68,28 @@ export default async function RankingsPage({
   const getReturn = (r: EnrichedRow): number | null =>
     r[periodoConfig.field] as number | null;
 
-  const filteredRows = catFilter
-    ? snap.rows.filter((r) => r.categoria === catFilter)
-    : snap.rows;
+  // Apply both filters (legacy `cat` filter still works on top of estrategia).
+  const filteredRows = snap.rows.filter((r) => {
+    if (estrategiaFilter && r.estrategia !== estrategiaFilter) return false;
+    if (legacyCatFilter && r.categoria !== legacyCatFilter) return false;
+    return true;
+  });
 
-  const byCat = new Map<string, EnrichedRow[]>();
+  // Group by estrategia (the more meaningful axis for asesores).
+  const byEstrategia = new Map<string, EnrichedRow[]>();
   for (const r of filteredRows) {
-    if (!r.categoria) continue;
     const ret = getReturn(r);
     if (ret == null) continue;
-    if (!byCat.has(r.categoria)) byCat.set(r.categoria, []);
-    byCat.get(r.categoria)!.push(r);
+    if (!byEstrategia.has(r.estrategia)) byEstrategia.set(r.estrategia, []);
+    byEstrategia.get(r.estrategia)!.push(r);
   }
 
-  const groups = Array.from(byCat.entries())
-    .map(([cat, rows]) => ({
-      categoria: cat,
-      total: snap.rows.filter((r) => r.categoria === cat).length,
+  const groups = Array.from(byEstrategia.entries())
+    .map(([estrategia, rows]) => ({
+      estrategia,
+      total: snap.rows.filter((r) => r.estrategia === estrategia).length,
       aumTotal: snap.rows
-        .filter((r) => r.categoria === cat)
+        .filter((r) => r.estrategia === estrategia)
         .reduce((s, r) => s + (r.patrimonio ?? 0), 0),
       top: rows
         .sort((a, b) => (getReturn(b) ?? -Infinity) - (getReturn(a) ?? -Infinity))
@@ -93,14 +100,14 @@ export default async function RankingsPage({
   const buildPeriodoHref = (p: Periodo) => {
     const params = new URLSearchParams();
     params.set("periodo", p);
-    if (catFilter) params.set("cat", catFilter);
+    if (estrategiaFilter) params.set("estrategia", estrategiaFilter);
     return `/rankings?${params.toString()}`;
   };
 
-  const buildCatHref = (cat: string) => {
+  const buildEstrategiaHref = (e: string) => {
     const params = new URLSearchParams();
     params.set("periodo", validPeriodo);
-    if (cat) params.set("cat", cat);
+    if (e) params.set("estrategia", e);
     return `/rankings?${params.toString()}`;
   };
 
@@ -135,28 +142,31 @@ export default async function RankingsPage({
               {p.label}
             </Link>
           ))}
-          <div className="ml-auto flex flex-wrap gap-1">
+          <div className="ml-auto flex flex-wrap gap-1 items-center">
+            <span className="text-xs font-bold uppercase tracking-wider text-amauta-text-tertiary mr-1">
+              Estrategia:
+            </span>
             <Link
-              href={buildCatHref("")}
+              href={buildEstrategiaHref("")}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                !catFilter
+                !estrategiaFilter
                   ? "bg-amauta-dark text-white"
                   : "bg-amauta-bg-light text-amauta-text-secondary hover:bg-amauta-yellow/20"
               }`}
             >
               Todas
             </Link>
-            {snap.categorias.map((cat) => (
+            {snap.estrategias.map((e) => (
               <Link
-                key={cat}
-                href={buildCatHref(cat)}
+                key={e}
+                href={buildEstrategiaHref(e)}
                 className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                  catFilter === cat
+                  estrategiaFilter === e
                     ? "bg-amauta-dark text-white"
                     : "bg-amauta-bg-light text-amauta-text-secondary hover:bg-amauta-yellow/20"
                 }`}
               >
-                {cat}
+                {e}
               </Link>
             ))}
           </div>
@@ -172,8 +182,8 @@ export default async function RankingsPage({
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
             {groups.map((g) => (
-              <CategoryCard
-                key={g.categoria}
+              <EstrategiaCard
+                key={g.estrategia}
                 group={g}
                 getReturn={getReturn}
                 periodoLabel={periodoConfig.label}
@@ -193,14 +203,14 @@ export default async function RankingsPage({
   );
 }
 
-function CategoryCard({
+function EstrategiaCard({
   group,
   getReturn,
   periodoLabel,
   outlierThreshold,
 }: {
   group: {
-    categoria: string;
+    estrategia: string;
     total: number;
     aumTotal: number;
     top: EnrichedRow[];
@@ -209,19 +219,19 @@ function CategoryCard({
   periodoLabel: string;
   outlierThreshold: number;
 }) {
-  const catSlug = encodeURIComponent(group.categoria);
+  const slug = encodeURIComponent(group.estrategia);
   return (
     <article className="bg-white rounded-lg border border-amauta-bg-light overflow-hidden">
       <header className="bg-amauta-dark text-white px-4 py-3 flex items-end justify-between gap-3">
         <div>
-          <h2 className="font-extrabold">{group.categoria}</h2>
+          <h2 className="font-extrabold">{group.estrategia}</h2>
           <p className="text-xs text-white/60">
             {group.total.toLocaleString("es-AR")} clases · AUM{" "}
             {fmtCompactCurrency(group.aumTotal, "ARS")}
           </p>
         </div>
         <Link
-          href={`/fondos?cat=${catSlug}&sort=patrimonio_desc`}
+          href={`/fondos?estrategia=${slug}&sort=patrimonio_desc`}
           className="text-xs font-bold text-amauta-yellow hover:text-white whitespace-nowrap"
         >
           Ver todos →
