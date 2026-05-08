@@ -46,7 +46,14 @@ export const maxDuration = 60;
 const META_BATCH_SIZE = 500;
 const CARTERA_BATCH_SIZE = 500;
 const SCRAPE_CONCURRENCY = 20;
-const DEFAULT_MAX_SECONDS = 50;
+/**
+ * Time budget — must stay safely below Vercel's `maxDuration = 60` ceiling.
+ * The cold start + catalog download + meta upsert eat 5-15s before scraping
+ * even starts, and an in-flight fetch can take up to 10s to return after we
+ * hit the deadline. Leaving 20s of headroom keeps us under the platform
+ * timeout reliably.
+ */
+const DEFAULT_MAX_SECONDS = 40;
 
 /** Anchor a snapshot to the current ISO week's Monday (so daily reruns
  *  during the same week share the same `fecha_snapshot`). */
