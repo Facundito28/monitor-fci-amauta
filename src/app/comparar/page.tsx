@@ -275,19 +275,19 @@ export default async function CompararPage({
                     outlierThreshold={5}
                   />
                   <ComparisonReturnRow
-                    label="Rend. MTD"
+                    label="Mensual"
                     rows={selected}
                     get={(r) => r.retMTD}
                     outlierThreshold={35}
                   />
                   <ComparisonReturnRow
-                    label="Rend. YTD"
+                    label="Año en Curso"
                     rows={selected}
                     get={(r) => r.ytd}
                     outlierThreshold={100}
                   />
                   <ComparisonReturnRow
-                    label="Rend. 13M"
+                    label="Interanual"
                     rows={selected}
                     get={(r) => r.ret13m}
                     outlierThreshold={150}

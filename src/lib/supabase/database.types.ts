@@ -86,7 +86,15 @@ export type Database = {
           tipo_clase_nombre?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fci_clase_fondo_id_fkey"
+            columns: ["fondo_id"]
+            isOneToOne: false
+            referencedRelation: "fci_fondo"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fci_fondo: {
         Row: {
@@ -146,7 +154,29 @@ export type Database = {
           region?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fci_fondo_categoria_id_fkey"
+            columns: ["categoria_id"]
+            isOneToOne: false
+            referencedRelation: "fci_categoria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fci_fondo_depositaria_id_fkey"
+            columns: ["depositaria_id"]
+            isOneToOne: false
+            referencedRelation: "fci_gestora"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fci_fondo_gestora_id_fkey"
+            columns: ["gestora_id"]
+            isOneToOne: false
+            referencedRelation: "fci_gestora"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       fci_gestora: {
         Row: {
@@ -175,6 +205,93 @@ export type Database = {
           nombre?: string
           nombre_corto?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      fci_snapshot: {
+        Row: {
+          calificacion: string | null
+          categoria_detallada: string | null
+          ccp: number | null
+          codigo_cafci: number
+          codigo_cnv: string | null
+          com_ingreso: number | null
+          com_rescate: number | null
+          created_at: string
+          depositaria: string | null
+          fecha: string
+          fee_depositaria: number | null
+          fee_gestion: number | null
+          fondo: string
+          gestora: string | null
+          hon_exito: string | null
+          horizonte: string | null
+          moneda: string | null
+          patrimonio: number | null
+          plazo_liq: number | null
+          region: string | null
+          var_13m: number | null
+          var_dia: number | null
+          var_mes: number | null
+          var_ytd: number | null
+          vcp: number | null
+          vcp_ayer: number | null
+        }
+        Insert: {
+          calificacion?: string | null
+          categoria_detallada?: string | null
+          ccp?: number | null
+          codigo_cafci: number
+          codigo_cnv?: string | null
+          com_ingreso?: number | null
+          com_rescate?: number | null
+          created_at?: string
+          depositaria?: string | null
+          fecha: string
+          fee_depositaria?: number | null
+          fee_gestion?: number | null
+          fondo: string
+          gestora?: string | null
+          hon_exito?: string | null
+          horizonte?: string | null
+          moneda?: string | null
+          patrimonio?: number | null
+          plazo_liq?: number | null
+          region?: string | null
+          var_13m?: number | null
+          var_dia?: number | null
+          var_mes?: number | null
+          var_ytd?: number | null
+          vcp?: number | null
+          vcp_ayer?: number | null
+        }
+        Update: {
+          calificacion?: string | null
+          categoria_detallada?: string | null
+          ccp?: number | null
+          codigo_cafci?: number
+          codigo_cnv?: string | null
+          com_ingreso?: number | null
+          com_rescate?: number | null
+          created_at?: string
+          depositaria?: string | null
+          fecha?: string
+          fee_depositaria?: number | null
+          fee_gestion?: number | null
+          fondo?: string
+          gestora?: string | null
+          hon_exito?: string | null
+          horizonte?: string | null
+          moneda?: string | null
+          patrimonio?: number | null
+          plazo_liq?: number | null
+          region?: string | null
+          var_13m?: number | null
+          var_dia?: number | null
+          var_mes?: number | null
+          var_ytd?: number | null
+          vcp?: number | null
+          vcp_ayer?: number | null
         }
         Relationships: []
       }
@@ -230,6 +347,145 @@ export type Database = {
           tir_dia_tna?: number | null
           vcp?: number | null
         }
+        Relationships: [
+          {
+            foreignKeyName: "fci_vcp_diario_clase_id_fkey"
+            columns: ["clase_id"]
+            isOneToOne: false
+            referencedRelation: "fci_clase"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instrument_blocks: {
+        Row: {
+          block_order: number
+          block_type: string
+          created_at: string
+          data: Json
+          id: string
+          instrument_id: string
+          tab_index: number
+        }
+        Insert: {
+          block_order: number
+          block_type: string
+          created_at?: string
+          data?: Json
+          id?: string
+          instrument_id: string
+          tab_index: number
+        }
+        Update: {
+          block_order?: number
+          block_type?: string
+          created_at?: string
+          data?: Json
+          id?: string
+          instrument_id?: string
+          tab_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instrument_blocks_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instrument_blocks_history: {
+        Row: {
+          block_id: string
+          block_order: number | null
+          block_type: string | null
+          changed_at: string
+          data: Json | null
+          history_id: number
+          instrument_id: string
+          operation: string
+          tab_index: number | null
+        }
+        Insert: {
+          block_id: string
+          block_order?: number | null
+          block_type?: string | null
+          changed_at?: string
+          data?: Json | null
+          history_id?: number
+          instrument_id: string
+          operation: string
+          tab_index?: number | null
+        }
+        Update: {
+          block_id?: string
+          block_order?: number | null
+          block_type?: string | null
+          changed_at?: string
+          data?: Json | null
+          history_id?: number
+          instrument_id?: string
+          operation?: string
+          tab_index?: number | null
+        }
+        Relationships: []
+      }
+      instruments: {
+        Row: {
+          category: string
+          change_dir: string | null
+          change_text: string | null
+          created_at: string
+          id: string
+          name: string
+          price: string | null
+          sort_order: number
+          status: string
+          tabs: Json
+          ticker: string
+          top_metrics: Json
+          tv_symbol: string | null
+          type: string
+          updated_at: string
+          updated_text: string | null
+        }
+        Insert: {
+          category: string
+          change_dir?: string | null
+          change_text?: string | null
+          created_at?: string
+          id: string
+          name: string
+          price?: string | null
+          sort_order?: number
+          status?: string
+          tabs?: Json
+          ticker: string
+          top_metrics?: Json
+          tv_symbol?: string | null
+          type: string
+          updated_at?: string
+          updated_text?: string | null
+        }
+        Update: {
+          category?: string
+          change_dir?: string | null
+          change_text?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          price?: string | null
+          sort_order?: number
+          status?: string
+          tabs?: Json
+          ticker?: string
+          top_metrics?: Json
+          tv_symbol?: string | null
+          type?: string
+          updated_at?: string
+          updated_text?: string | null
+        }
         Relationships: []
       }
     }
@@ -247,11 +503,25 @@ export type Database = {
           tir_dia_tna: number | null
           vcp: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fci_vcp_diario_clase_id_fkey"
+            columns: ["clase_id"]
+            isOneToOne: false
+            referencedRelation: "fci_clase"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
-    Functions: { [_ in never]: never }
-    Enums: { [_ in never]: never }
-    CompositeTypes: { [_ in never]: never }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
 }

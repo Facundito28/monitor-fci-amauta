@@ -245,14 +245,14 @@ export default async function FondosPage({
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. MTD"
+                    label="Mensual"
                     baseKey="ret30d"
                     activeSort={sortKey}
                     buildHref={buildHref}
                     align="right"
                   />
                   <SortableHeader
-                    label="Rend. 13M"
+                    label="Interanual"
                     baseKey="ret1a"
                     activeSort={sortKey}
                     buildHref={buildHref}
@@ -381,7 +381,7 @@ export default async function FondosPage({
         </div>
 
         <p className="mt-4 text-xs text-amauta-text-tertiary">
-          MTD = mes en curso (desde fin de mes anterior) · 13M = vs misma fecha del año anterior ·
+          Mensual = desde fin de mes anterior · Interanual = vs misma fecha del año anterior ·
           Hacé click en ↕ para ordenar · Hacé click en el nombre para ver la ficha completa ·{" "}
           <span className="text-amber-500 font-semibold">⚠</span> = posible artefacto de datos
           (corrección de VCP o distribución), verificar con la fuente oficial

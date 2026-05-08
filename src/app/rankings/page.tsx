@@ -15,10 +15,10 @@ const TOP_N = 10;
 type Periodo = "1d" | "mtd" | "ytd" | "13m";
 
 const PERIODOS: { key: Periodo; label: string; field: keyof EnrichedRow; outlierThreshold: number }[] = [
-  { key: "1d",  label: "Diario (1D)",        field: "ret1d",  outlierThreshold: 5   },
-  { key: "mtd", label: "Mes en curso (MTD)", field: "retMTD", outlierThreshold: 35  },
-  { key: "ytd", label: "Año en curso (YTD)", field: "ytd",    outlierThreshold: 100 },
-  { key: "13m", label: "Interanual (13M)",   field: "ret13m", outlierThreshold: 150 },
+  { key: "1d",  label: "Diario (1D)",         field: "ret1d",  outlierThreshold: 5   },
+  { key: "mtd", label: "Mensual",             field: "retMTD", outlierThreshold: 35  },
+  { key: "ytd", label: "Año en Curso (YTD)",  field: "ytd",    outlierThreshold: 100 },
+  { key: "13m", label: "Interanual",          field: "ret13m", outlierThreshold: 150 },
 ];
 
 interface SearchParams {

@@ -156,22 +156,22 @@ export default async function FondoDetailPage({
               </thead>
               <tbody>
                 <ReturnRow
-                  label="Del día (1D)"
+                  label="Diario (1D)"
                   simple={fondo.ret1d}
                   tna={fondo.tna1d}
                 />
                 <ReturnRow
-                  label="Del mes (MTD)"
+                  label="Mensual"
                   simple={fondo.retMTD}
                   tna={fondo.tna30d}
                 />
                 <ReturnRow
-                  label="Del año (YTD)"
+                  label="Año en Curso (YTD)"
                   simple={fondo.ytd}
                   tna={null}
                 />
                 <ReturnRow
-                  label="Interanual (13M)"
+                  label="Interanual"
                   simple={fondo.ret13m}
                   tna={fondo.tna1a}
                 />
@@ -179,7 +179,7 @@ export default async function FondoDetailPage({
             </table>
           </div>
           <div className="px-4 py-2 text-xs text-amauta-text-tertiary border-t border-amauta-bg-light bg-amauta-bg-light/30">
-            Variaciones pre-calculadas por CAFCI sobre VCP diario · MTD = desde fin de mes anterior · 13M = vs misma fecha del año anterior · TNA = rendimiento × 365/días
+            Variaciones pre-calculadas por CAFCI · Mensual = desde fin de mes anterior · Interanual = vs misma fecha del año anterior · TNA = rendimiento × 365/días
           </div>
         </section>
 
