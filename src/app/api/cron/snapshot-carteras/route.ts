@@ -159,9 +159,17 @@ export async function GET(req: NextRequest) {
   const pending = fondosToScrape.filter((x) => !alreadyDone.has(x.fondoId));
 
   // 3 — Scrape with bounded concurrency until budget exhausted.
+  // Convergence trick: any fondo we *attempted* this run (success with rows,
+  // success-but-empty, or error) gets at least one sentinel row in fci_cartera
+  // so the next run's `alreadyDone` query skips it. Without this, fondos
+  // without published carteras (cerrados, en liquidación, etc.) loop forever.
   let scraped = 0;
   let errors = 0;
+  let emptyCount = 0;
   let i = 0;
+  const fondosWithRows = new Set<number>(); // had real cartera, rows inserted
+  const fondosEmpty: number[] = []; // ficha OK but no pie chart
+  const fondosErrored: number[] = []; // network / 5xx / parse error
 
   async function worker() {
     while (i < pending.length && Date.now() < deadline) {
@@ -172,6 +180,7 @@ export async function GET(req: NextRequest) {
         holdings = await fetchCarteraFondo(fondoId, firstClaseId);
       } catch (err) {
         errors++;
+        fondosErrored.push(fondoId);
         console.error(
           `[cron snapshot-carteras] scrape ${fondoId} failed:`,
           err,
@@ -179,8 +188,8 @@ export async function GET(req: NextRequest) {
         continue;
       }
       if (holdings.length === 0) {
-        // No pie chart published yet — count as success but no rows.
-        scraped++;
+        emptyCount++;
+        fondosEmpty.push(fondoId);
         continue;
       }
       const rows: CarteraInsert[] = holdings.map((h) => ({
@@ -196,12 +205,14 @@ export async function GET(req: NextRequest) {
         .upsert(rows, { onConflict: "fecha_snapshot,fondo_id,rank" });
       if (error) {
         errors++;
+        fondosErrored.push(fondoId);
         console.error(
           `[cron snapshot-carteras] upsert fondo ${fondoId} failed:`,
           error,
         );
         continue;
       }
+      fondosWithRows.add(fondoId);
       scraped++;
     }
   }
@@ -210,7 +221,48 @@ export async function GET(req: NextRequest) {
   for (let k = 0; k < SCRAPE_CONCURRENCY; k++) workers.push(worker());
   await Promise.all(workers);
 
+  // 4 — Mark "no cartera" / "errored" fondos with a sentinel row at rank=0,
+  // so future runs treat them as alreadyDone. We only sentinel fondos that
+  // didn't get real rows (rank≥1 wins on the unique PK if both happen).
+  const sentinelRows: CarteraInsert[] = [];
+  for (const fondoId of fondosEmpty) {
+    sentinelRows.push({
+      fecha_snapshot: fechaSnapshot,
+      fondo_id: fondoId,
+      rank: 0,
+      activo: "(sin composición publicada)",
+      tipo_activo: "Sin Cartera",
+      share: 0,
+    });
+  }
+  for (const fondoId of fondosErrored) {
+    if (fondosWithRows.has(fondoId)) continue;
+    sentinelRows.push({
+      fecha_snapshot: fechaSnapshot,
+      fondo_id: fondoId,
+      rank: 0,
+      activo: "(error al consultar CAFCI)",
+      tipo_activo: "Sin Cartera",
+      share: 0,
+    });
+  }
+  let sentinelInserted = 0;
+  if (sentinelRows.length > 0) {
+    const { error: sentinelErr } = await supa
+      .from("fci_cartera")
+      .upsert(sentinelRows, { onConflict: "fecha_snapshot,fondo_id,rank" });
+    if (sentinelErr) {
+      console.error(
+        "[cron snapshot-carteras] sentinel upsert failed:",
+        sentinelErr,
+      );
+    } else {
+      sentinelInserted = sentinelRows.length;
+    }
+  }
+
   const elapsedMs = Date.now() - startedAt;
+  const attempted = scraped + emptyCount + errors;
   const complete = i >= pending.length;
 
   return NextResponse.json({
@@ -221,9 +273,11 @@ export async function GET(req: NextRequest) {
     meta_upserted: metaUpserted,
     fondos_total: fondosToScrape.length,
     fondos_skipped_existing: alreadyDone.size,
-    fondos_processed: scraped,
-    fondos_remaining: Math.max(0, pending.length - scraped - errors),
-    errors,
+    fondos_with_cartera: scraped,
+    fondos_empty: emptyCount,
+    fondos_errored: errors,
+    sentinel_inserted: sentinelInserted,
+    fondos_remaining: Math.max(0, pending.length - attempted),
     elapsed_ms: elapsedMs,
   });
 }
