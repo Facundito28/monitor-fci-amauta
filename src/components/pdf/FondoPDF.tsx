@@ -423,22 +423,22 @@ export function FondoPDF({ fondo }: FondoPDFProps) {
             </View>
 
             <RetRow
-              label="Del dia (1D)"
+              label="Diario (1D)"
               simple={fondo.ret1d}
               tna={fondo.tna1d}
             />
             <RetRow
-              label="Del mes (MTD)"
+              label="Mensual"
               simple={fondo.retMTD}
               tna={fondo.tna30d}
             />
             <RetRow
-              label="Del ano (YTD)"
+              label="Ano en Curso (YTD)"
               simple={fondo.ytd}
               tna={null}
             />
             <RetRow
-              label="Interanual (13M)"
+              label="Interanual"
               simple={fondo.ret13m}
               tna={fondo.tna1a}
               last
