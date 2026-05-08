@@ -366,9 +366,8 @@ export function FondoPDF({ fondo }: FondoPDFProps) {
         {/* ── HEADER ────────────────────────────────────────────────── */}
         <View style={s.header}>
           <View style={s.badgeRow}>
-            {fondo.categoria && (
-              <Text style={s.badge}>{fondo.categoria}</Text>
-            )}
+            {/* Estrategia es el bucket principal — toma el badge prominent (amarillo). */}
+            <Text style={s.badge}>{fondo.estrategia}</Text>
             {fondo.horizonte && (
               <Text style={s.badgeOutline}>{fondo.horizonte}</Text>
             )}

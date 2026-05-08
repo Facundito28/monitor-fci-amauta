@@ -219,6 +219,11 @@ export default async function CompararPage({
                   {/* ── Datos básicos ── */}
                   <SectionDivider label="Datos generales" colSpan={selected.length + 1} />
                   <ComparisonRow
+                    label="Estrategia"
+                    rows={selected}
+                    get={(r) => r.estrategia}
+                  />
+                  <ComparisonRow
                     label="Categoría"
                     rows={selected}
                     get={(r) => r.categoria ?? "—"}
