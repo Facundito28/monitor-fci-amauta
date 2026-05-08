@@ -97,10 +97,34 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // 2 — Map to Supabase shape, drop rows without a CAFCI ID (they can't be PK'd).
+  // 2 — Detect the "real" snapshot date by majority vote.
+  // CAFCI's planilla includes a handful of liquidated/inactive funds whose
+  // `fecha` column is their last known date (not the snapshot date). We only
+  // want the active funds of the current closing day, so we keep just those
+  // matching the most-frequent date.
+  const dateCounts = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.fechaDDMMYY) continue;
+    dateCounts.set(r.fechaDDMMYY, (dateCounts.get(r.fechaDDMMYY) ?? 0) + 1);
+  }
+  let snapshotDate = "";
+  let maxCount = 0;
+  for (const [d, n] of dateCounts) {
+    if (n > maxCount) {
+      maxCount = n;
+      snapshotDate = d;
+    }
+  }
+
+  // 3 — Map to Supabase shape, dropping inactive funds and rows without
+  // a CAFCI ID (they can't be primary-keyed).
   const records: SnapshotInsert[] = [];
   let dropped = 0;
   for (const r of rows) {
+    if (r.fechaDDMMYY !== snapshotDate) {
+      dropped++;
+      continue;
+    }
     const rec = rowToSnapshot(r);
     if (rec) records.push(rec);
     else dropped++;
