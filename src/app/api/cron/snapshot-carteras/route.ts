@@ -137,23 +137,39 @@ export async function GET(req: NextRequest) {
   }
 
   // Skip already-snapshot fondos for the current week to make reruns cheap.
+  //
+  // We MUST paginate this SELECT instead of relying on .in(fondoIds): Supabase
+  // caps every response at 1000 rows, and `fci_cartera` has 5-15 rows per
+  // fondo (one per holding plus sentinel). Once total rows for the week >1000
+  // the .in() result silently truncates → some fondos already-done never enter
+  // `alreadyDone` and get re-scraped every iteration → loop never converges.
+  //
+  // The pagination here scans ALL `fci_cartera` rows for this week's snapshot
+  // (typically ~10-15k rows = ~10-15 paginated round-trips, well under 1s),
+  // dedupes fondo_ids in a Set, then `pending` filters against it.
   const alreadyDone = new Set<number>();
   if (skipExisting) {
-    for (let i = 0; i < fondosToScrape.length; i += 1000) {
-      const ids = fondosToScrape.slice(i, i + 1000).map((x) => x.fondoId);
+    const PAGE = 1000;
+    let from = 0;
+    while (true) {
       const { data, error } = await supa
         .from("fci_cartera")
         .select("fondo_id")
         .eq("fecha_snapshot", fechaSnapshot)
-        .in("fondo_id", ids);
+        .order("fondo_id", { ascending: true })
+        .range(from, from + PAGE - 1);
       if (error) {
         console.error("[cron snapshot-carteras] existing query error:", error);
-        // Non-fatal — proceed without skip.
+        // Non-fatal — proceed without skip (cron is idempotent so we just
+        // pay the cost of re-upserting all rows this run).
         break;
       }
-      for (const row of data ?? []) {
+      if (!data || data.length === 0) break;
+      for (const row of data) {
         if (typeof row.fondo_id === "number") alreadyDone.add(row.fondo_id);
       }
+      if (data.length < PAGE) break;
+      from += PAGE;
     }
   }
   const pending = fondosToScrape.filter((x) => !alreadyDone.has(x.fondoId));
