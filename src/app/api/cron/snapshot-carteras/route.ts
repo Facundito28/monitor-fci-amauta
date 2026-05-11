@@ -55,6 +55,28 @@ const SCRAPE_CONCURRENCY = 20;
  */
 const DEFAULT_MAX_SECONDS = 40;
 
+/**
+ * Cuántas clases distintas del MISMO fondo probamos antes de marcarlo como
+ * "sin composición publicada". CAFCI no siempre renderiza el pie chart en
+ * todas las clases — ej. Balanz Capital Ahorro tiene composición visible en
+ * Clase B (id 1115) pero no en Clase A (id 1114). Cuatro tentativas cubre la
+ * inmensa mayoría de fondos (la prioridad es B → A → C → D → ...).
+ */
+const MAX_CLASE_RETRIES = 4;
+
+/** Priority for the class picker — B is the retail standard. */
+const CLASE_PRIORITY: Record<string, number> = {
+  B: 0, A: 1, C: 2, D: 3, E: 4, F: 5, G: 6, L: 7,
+};
+function parseClaseLetra(claseNombre: string): string {
+  const m = /-\s*Clase\s+([A-Z])\b/i.exec(claseNombre);
+  return m ? m[1].toUpperCase() : "";
+}
+function claseScore(letra: string): number {
+  const p = CLASE_PRIORITY[letra];
+  return p !== undefined ? p : 999;
+}
+
 /** Anchor a snapshot to the current ISO week's Monday (so daily reruns
  *  during the same week share the same `fecha_snapshot`). */
 function currentWeekMondayIso(): string {
@@ -127,13 +149,31 @@ export async function GET(req: NextRequest) {
   }
 
   // 2 — Determine which fondos still need scraping for this week.
-  // Use the FIRST clase id of each fondo to hit the ficha (cartera is shared).
-  const fondosToScrape: { fondoId: number; firstClaseId: number }[] = [];
+  //
+  // Algunos fondos NO publican composición en la ficha de su Clase A pero SÍ
+  // en otras clases del mismo fondo (descubrimos Balanz Capital Ahorro: clase
+  // 1114 = A → empty, clase 1115 = B → 28% Lecer + 15% Boncer + ... CER puro).
+  // Por eso almacenamos TODAS las clases del fondo, sorteadas por prioridad
+  // B > A > C > D > E > F > G > L. El worker prueba en ese orden y se queda
+  // con la primera ficha que devuelva un pie chart no-vacío.
+  const fondosToScrape: { fondoId: number; claseIds: number[] }[] = [];
   for (const f of catalog.fondos ?? []) {
     if (typeof f.id !== "number") continue;
-    const claseId = f.clases?.[0]?.id;
-    if (typeof claseId !== "number") continue;
-    fondosToScrape.push({ fondoId: f.id, firstClaseId: claseId });
+    const clases = (f.clases ?? [])
+      .filter(
+        (c): c is { id: number; nombre: string } =>
+          typeof c.id === "number" && typeof c.nombre === "string",
+      )
+      .sort(
+        (a, b) =>
+          claseScore(parseClaseLetra(a.nombre)) -
+          claseScore(parseClaseLetra(b.nombre)),
+      );
+    if (clases.length === 0) continue;
+    fondosToScrape.push({
+      fondoId: f.id,
+      claseIds: clases.map((c) => c.id),
+    });
   }
 
   // Skip already-snapshot fondos for the current week to make reruns cheap.
@@ -190,22 +230,42 @@ export async function GET(req: NextRequest) {
   async function worker() {
     while (i < pending.length && Date.now() < deadline) {
       const idx = i++;
-      const { fondoId, firstClaseId } = pending[idx];
-      let holdings: CarteraHolding[];
-      try {
-        holdings = await fetchCarteraFondo(fondoId, firstClaseId);
-      } catch (err) {
-        errors++;
-        fondosErrored.push(fondoId);
-        console.error(
-          `[cron snapshot-carteras] scrape ${fondoId} failed:`,
-          err,
-        );
-        continue;
+      const { fondoId, claseIds } = pending[idx];
+
+      // Probamos hasta MAX_CLASE_RETRIES clases del fondo en orden de prioridad
+      // (B → A → C → D → ...). Nos quedamos con la primera ficha que devuelva
+      // un pie chart no-vacío. Si todas devuelven empty → marcamos sentinel.
+      // Si todas erroran → marcamos errored.
+      let holdings: CarteraHolding[] = [];
+      let anyFetchSucceeded = false;
+      let lastErr: unknown = null;
+      const triesLimit = Math.min(claseIds.length, MAX_CLASE_RETRIES);
+      for (let t = 0; t < triesLimit && Date.now() < deadline; t++) {
+        try {
+          const h = await fetchCarteraFondo(fondoId, claseIds[t]);
+          anyFetchSucceeded = true;
+          if (h.length > 0) {
+            holdings = h;
+            break;
+          }
+        } catch (err) {
+          lastErr = err;
+          // Sigue al siguiente clase id — la red puede haber fallado puntualmente.
+        }
       }
+
       if (holdings.length === 0) {
-        emptyCount++;
-        fondosEmpty.push(fondoId);
+        if (!anyFetchSucceeded) {
+          errors++;
+          fondosErrored.push(fondoId);
+          console.error(
+            `[cron snapshot-carteras] scrape ${fondoId} all classes failed:`,
+            lastErr,
+          );
+        } else {
+          emptyCount++;
+          fondosEmpty.push(fondoId);
+        }
         continue;
       }
       const rows: CarteraInsert[] = holdings.map((h) => ({
