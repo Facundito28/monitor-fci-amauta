@@ -339,11 +339,16 @@ async function loadCarteraStore(): Promise<CarteraStore> {
           if (!data || data.length === 0) break;
           for (const r of data) {
             if (typeof r.fondo_id !== "number") continue;
+            // Skip sentinel rows (rank=0) inserted by the cron to mark
+            // "this fondo was attempted but had no published cartera". They
+            // exist purely to prevent the cron from re-attempting forever.
+            const rank = typeof r.rank === "number" ? r.rank : 0;
+            if (rank === 0) continue;
             if (!holdingsByFondo.has(r.fondo_id)) {
               holdingsByFondo.set(r.fondo_id, []);
             }
             holdingsByFondo.get(r.fondo_id)!.push({
-              rank: typeof r.rank === "number" ? r.rank : 0,
+              rank,
               activo: r.activo ?? "",
               tipo_activo: r.tipo_activo ?? "Otros",
               share: typeof r.share === "number" ? r.share : 0,
