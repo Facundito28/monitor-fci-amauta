@@ -115,9 +115,34 @@ export interface CartHolding {
  * Money Market, DL, Hard USD), devolvemos ese bucket. Sino, fallback al
  * clasificador macro estándar (`inferEstrategia`).
  *
- * Thresholds elegidos para que un fondo "puramente CER" (>50% Lecer+Boncer)
- * caiga ahí, pero un mix balanceado (ej. 30% CER + 30% Lecap + 40% otro)
- * caiga al bucket macro "Renta Fija ARS".
+ * Diseño (BLOQUE 3 — Opción A, May 2026):
+ *   1. Guardrail por categoría macro CAFCI — si el catálogo ya dice "Money
+ *      Market" / "Renta Variable" / "Renta Mixta", respetamos. Holdings de
+ *      un MM dinámico pueden tener 30% en Lecaps cortos y aún así ser
+ *      conceptualmente MM; idem un fondo mixto con concentración temporal
+ *      en CER. La categoría macro de CAFCI es señal fuerte sobre la
+ *      INTENCIÓN del fondo (no la composición puntual).
+ *   2. Para fondos de Renta Fija solo: clasificamos por holdings con
+ *      thresholds más permisivos (30% en vez de 50%) y resolvemos empates
+ *      por SHARE DOMINANTE entre los candidatos que pasan threshold.
+ *
+ * Thresholds (BLOQUE 3 — Opción A):
+ *   - CER ≥ 30%          (antes 50)
+ *   - Lecaps ≥ 30%       (antes 50)
+ *   - Dólar Linked ≥ 20% (antes 30)
+ *   - Hard USD ≥ 30%     (antes 50)
+ *   - Money Market cash ≥ 60% (sin cambio — sigue siendo un piso alto)
+ *
+ * Resolución de empate: si pasan threshold varios buckets (ej. CER 35% +
+ * Lecaps 32%), gana el de mayor share. Antes con "first match wins" el
+ * orden de chequeo dictaba la respuesta, lo cual era arbitrario.
+ *
+ * Verificado contra holdings reales 2026-05-11:
+ *   - Balanz Capital Ahorro: Lecer+Boncer ~68% → CER ✅
+ *   - Balanz Institucional:  Boncer ~74%        → CER ✅
+ *   - Compass Renta Fija:    Hard USD ~46%      → Hard USD ✅ (antes RF USD)
+ *   - Pellegrini RF III:     Lecap ~49%, CER ~25% → Lecaps ✅
+ *   - Pellegrini RF II:      CER ~55%, Lecap ~26% → CER ✅
  */
 export function inferEstrategiaWithHoldings(
   input: ClassifierInput,
@@ -125,7 +150,15 @@ export function inferEstrategiaWithHoldings(
 ): StandardEstrategia {
   if (holdings.length === 0) return inferEstrategia(input);
 
-  // Aggregate share por tipo_activo.
+  // Guardrail macro: categorías no-RF se respetan del catálogo CAFCI.
+  const cat = (input.categoria ?? "").toLowerCase();
+  if (cat.includes("money market") || cat.includes("mercado de dinero")) {
+    return "Money Market";
+  }
+  if (cat.includes("renta variable")) return "Renta Variable";
+  if (cat.includes("renta mixta")) return "Renta Mixta";
+
+  // Aggregate share por tipo_activo (solo para fondos de Renta Fija de acá).
   let cer = 0,
     lecaps = 0,
     dl = 0,
@@ -142,18 +175,24 @@ export function inferEstrategiaWithHoldings(
       cash += s;
   }
 
-  // Money Market: cash equivalents son la mayoría.
+  // "Promotion to MM" — fondo categorizado RF pero con >60% en cash
+  // equivalents. Caso raro pero existe (cierres en pesos de fondos T+1).
   if (cash >= 60) return "Money Market";
 
-  // Buckets específicos cuando uno domina por al menos la mitad de la cartera
-  // VISIBLE (los top holdings — el "Resto de Activos" dilución no se cuenta).
-  // Threshold 50 es robusto: descarta fondos balanceados que mejor caen en RF.
-  if (cer >= 50) return "CER";
-  if (lecaps >= 50) return "Lecaps";
-  if (dl >= 30) return "Dólar Linked";
-  if (hardUsd >= 50) return "Hard USD";
+  // Candidatos: cualquier bucket que pasa su threshold. Gana el de mayor
+  // share, NO el primero en el orden de chequeo.
+  const candidates: Array<{ name: StandardEstrategia; share: number }> = [];
+  if (cer >= 30) candidates.push({ name: "CER", share: cer });
+  if (lecaps >= 30) candidates.push({ name: "Lecaps", share: lecaps });
+  if (dl >= 20) candidates.push({ name: "Dólar Linked", share: dl });
+  if (hardUsd >= 30) candidates.push({ name: "Hard USD", share: hardUsd });
 
-  // Sin concentración clara — vuelta al macro bucket.
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => b.share - a.share);
+    return candidates[0].name;
+  }
+
+  // Sin concentración clara — vuelta al macro bucket (Renta Fija ARS / USD).
   return inferEstrategia(input);
 }
 
