@@ -32,6 +32,37 @@ import { publicClient } from "@/lib/supabase/server";
 
 export type { CartHolding, Estrategia } from "./estrategia";
 
+/**
+ * Datos de UNA clase del fondo. Cada fondo CAFCI suele tener entre 1 y 8
+ * clases (A, B, C, D, E, F, G, L) que comparten cartera, gestora, depositaria,
+ * categoría y benchmark — solo difieren en honorarios + mínimos de suscripción.
+ *
+ * Usado en `EnrichedRow.clasesDisponibles` para que la ficha del fondo muestre
+ * el detalle de honorarios por clase sin que el listado principal se infle a
+ * 4.500+ filas (una por clase).
+ */
+export interface ClaseInfo {
+  codigoCafci: number | null;
+  /** Nombre completo de la clase, ej. "Balanz Capital Ahorro - Clase B". */
+  claseNombre: string;
+  /** Letra de la clase: "A", "B", "L", ... o "" si no se pudo extraer. */
+  letra: string;
+  /** Patrimonio (AUM) de ESTA clase. */
+  patrimonio: number | null;
+  /** Honorario anual del gerente para esta clase, en %. */
+  feeGestion: number | null;
+  /** Honorario anual de la depositaria, en %. */
+  feeDepositaria: number | null;
+  /** Comisión de suscripción, en %. */
+  comIngreso: number | null;
+  /** Comisión de rescate, en %. */
+  comRescate: number | null;
+  /** "S" | "N" — honorario por éxito. */
+  honExito: string | null;
+  /** Días para liquidar un rescate. */
+  plazoRescate: number | null;
+}
+
 export interface EnrichedRow {
   /** URL-safe key — same as the displayName. */
   key: string;
@@ -120,6 +151,20 @@ export interface EnrichedRow {
    * cartera-client.ts:classifyActivo.
    */
   cartera: CartHolding[];
+
+  /**
+   * Letra de la clase REPRESENTATIVA — la que usamos para llenar VCP / retornos
+   * / honorarios de la fila. Priorizamos B (estándar minorista), luego A,
+   * después C..G, después L (Ley 27.743). Null si la clase no tiene letra.
+   */
+  claseRepresentativa: string | null;
+
+  /**
+   * Todas las clases del fondo con su detalle de honorarios + patrimonio.
+   * Se muestra en la ficha `/fondo/[key]` para que el asesor compare costos
+   * entre clases (A típicamente más cara para minoristas, C-G institucionales).
+   */
+  clasesDisponibles: ClaseInfo[];
 }
 
 export interface MarketSnapshot {
@@ -252,6 +297,10 @@ function buildRow(
     fondoId,
     estrategia,
     cartera,
+    // Los campos de dedup se rellenan luego en _buildSnapshot (esta función
+    // sigue siendo "por-clase" y se preserva pura para tests/futuro uso).
+    claseRepresentativa: null,
+    clasesDisponibles: [],
   };
 }
 
@@ -373,6 +422,35 @@ async function loadCarteraStore(): Promise<CarteraStore> {
   return carteraInflight;
 }
 
+// ─── Class-letter parsing + representative picker ──────────────────────────
+//
+// CAFCI nombres tienen sufijo "- Clase X" donde X es A..G ó "L Ley 27.743".
+// Para dedup necesitamos extraer la letra y elegir la clase "representativa"
+// del fondo (la que mostramos en el listado).
+//
+// Prioridad de la clase representativa: B → A → C → D → E → F → G → L → otra.
+// Razonamiento: Clase B es el estándar minorista en la práctica argentina
+// (mínimo de suscripción accesible, comisiones típicas retail). A veces
+// algunos fondos sólo tienen A o son post-Ley 27.743 con sólo L — caemos al
+// fallback. Ante empate, gana la clase con mayor patrimonio (= más
+// representativa del fondo en términos de plata invertida).
+
+const CLASE_PRIORITY: Record<string, number> = {
+  B: 0, A: 1, C: 2, D: 3, E: 4, F: 5, G: 6, L: 7,
+};
+
+function parseClaseLetra(displayName: string): string {
+  // "Balanz Capital Ahorro - Clase B" → "B"
+  // "Balanz Capital Ahorro - Clase L Ley Nº 27.743" → "L"
+  const m = /-\s*Clase\s+([A-Z])\b/i.exec(displayName);
+  return m ? m[1].toUpperCase() : "";
+}
+
+function claseScore(letra: string): number {
+  const p = CLASE_PRIORITY[letra];
+  return p !== undefined ? p : 999;
+}
+
 async function _buildSnapshot(): Promise<MarketSnapshot> {
   // Fire all loaders in parallel — sheet download dominates latency.
   const [sheet, overrides, carteraStore] = await Promise.all([
@@ -380,6 +458,18 @@ async function _buildSnapshot(): Promise<MarketSnapshot> {
     loadEstrategiaOverrides(),
     loadCarteraStore(),
   ]);
+
+  // ── Step 1: agrupar filas (clases) por nombre base de fondo ───────────────
+  // CAFCI publica una fila por clase; un mismo fondo tiene 1-8 clases que
+  // comparten cartera, gestora, categoría — solo difieren en honorarios y
+  // mínimos. Para no inflar el listado a 4.500+ filas, dedupeamos por
+  // baseName y mostramos solo la clase representativa por fondo.
+  const byBase = new Map<string, CafciSheetRow[]>();
+  for (const r of sheet) {
+    const baseName = fondoBaseName(r.fondo);
+    if (!byBase.has(baseName)) byBase.set(baseName, []);
+    byBase.get(baseName)!.push(r);
+  }
 
   const rows: EnrichedRow[] = [];
   const categoriasSet = new Set<string>();
@@ -389,15 +479,61 @@ async function _buildSnapshot(): Promise<MarketSnapshot> {
   let aumTotal = 0;
   let fecha = "";
 
-  for (const r of sheet) {
+  for (const [baseName, group] of byBase) {
+    // ── Step 2: elegir clase representativa ─────────────────────────────────
+    // Ordenamos por (prioridad de letra asc, patrimonio desc) y tomamos la 1ra.
+    const sortedGroup = [...group].sort((a, b) => {
+      const sa = claseScore(parseClaseLetra(a.fondo));
+      const sb = claseScore(parseClaseLetra(b.fondo));
+      if (sa !== sb) return sa - sb;
+      return (b.patrimonio ?? 0) - (a.patrimonio ?? 0);
+    });
+    const rep = sortedGroup[0];
+
+    // ── Step 3: armar detalle de clases (para ficha del fondo) ──────────────
+    const clasesDisponibles: ClaseInfo[] = sortedGroup.map((c) => ({
+      codigoCafci: c.codigoCafci,
+      claseNombre: c.fondo,
+      letra: parseClaseLetra(c.fondo),
+      patrimonio: c.patrimonio,
+      feeGestion: c.honorariosGerente,
+      feeDepositaria: c.honorariosDepositaria,
+      comIngreso: c.comIngreso,
+      comRescate: c.comRescate,
+      honExito: c.honorariosExito,
+      plazoRescate: c.plazoLiq,
+    }));
+
+    // ── Step 4: AUM del fondo = suma de patrimonio de todas las clases ──────
+    // Más significativo que mostrar solo el de la clase representativa,
+    // porque "tamaño del fondo" depende de la suma agregada.
+    const patrimonioFondo = sortedGroup.reduce(
+      (acc, c) => acc + (c.patrimonio ?? 0),
+      0,
+    );
+
+    // ── Step 5: lookup cartera vía fondoId del rep ──────────────────────────
     const fondoId =
-      r.codigoCafci != null
-        ? carteraStore.claseToFondo.get(r.codigoCafci) ?? null
+      rep.codigoCafci != null
+        ? carteraStore.claseToFondo.get(rep.codigoCafci) ?? null
         : null;
     const holdings = fondoId != null
       ? carteraStore.holdingsByFondo.get(fondoId) ?? []
       : [];
-    const row = buildRow(r, overrides, fondoId, holdings);
+
+    // ── Step 6: armar row con datos del rep, override patrimonio agregado y
+    //           key/displayName por baseName (URL estable y limpia) ──────────
+    const baseRow = buildRow(rep, overrides, fondoId, holdings);
+    const letraRep = parseClaseLetra(rep.fondo);
+    const row: EnrichedRow = {
+      ...baseRow,
+      key: baseName,
+      displayName: baseName,
+      patrimonio: patrimonioFondo > 0 ? patrimonioFondo : baseRow.patrimonio,
+      claseRepresentativa: letraRep || null,
+      clasesDisponibles,
+    };
+
     if (row.categoria) categoriasSet.add(row.categoria);
     if (row.gestora) gestorasSet.add(row.gestora);
     if (row.moneda) monedasSet.add(row.moneda);

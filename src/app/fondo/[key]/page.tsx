@@ -11,6 +11,7 @@ import {
   fmtDateAr,
   getMarketSnapshotWithReturns,
 } from "@/lib/fondos/enriched";
+import { fondoBaseName } from "@/lib/fondos/client";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 import { EstrategiaBadge } from "@/components/EstrategiaBadge";
 
@@ -31,7 +32,14 @@ export default async function FondoDetailPage({
     return <ErrorState message="No pudimos cargar los datos de fondos." />;
   }
 
-  const fondo = snap.rows.find((r) => r.key === displayName);
+  // El listado ahora dedupea por baseName (sin "- Clase X"), así que el key
+  // de cada row es el baseName del fondo. Igual normalizamos el param de URL
+  // para tolerar links viejos con sufijo de clase: "Balanz X - Clase A" →
+  // "Balanz X".
+  const baseKey = fondoBaseName(displayName);
+  const fondo =
+    snap.rows.find((r) => r.key === displayName) ??
+    snap.rows.find((r) => r.key === baseKey);
 
   if (!fondo) {
     return (

@@ -8,6 +8,7 @@ import Link from "next/link";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
 import type { EnrichedRow } from "@/lib/fondos/enriched";
+import { fondoBaseName } from "@/lib/fondos/client";
 
 const MAX_FONDOS = 4;
 
@@ -52,11 +53,13 @@ export default async function CompararPage({
     );
   }
 
-  // Resolve selected rows
+  // Resolve selected rows. El listado dedupea por baseName, así que los keys
+  // ahora son baseName. Para tolerar URLs viejas con sufijo "- Clase X"
+  // normalizamos el key antes del lookup.
   const byKey = new Map<string, EnrichedRow>();
   for (const r of snap.rows) byKey.set(r.key, r);
   const selected = selectedKeys
-    .map((k) => byKey.get(k))
+    .map((k) => byKey.get(k) ?? byKey.get(fondoBaseName(k)))
     .filter((r): r is EnrichedRow => Boolean(r));
 
   // Build search results (limit to 30 most relevant by AUM)
