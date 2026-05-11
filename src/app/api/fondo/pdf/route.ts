@@ -14,6 +14,7 @@ import React from "react";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { FondoPDF } from "@/components/pdf/FondoPDF";
 import { getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
+import { fondoBaseName } from "@/lib/fondos/client";
 
 export const maxDuration = 60;
 
@@ -33,7 +34,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const fondo = snap.rows.find((r) => r.key === displayName);
+  // Tolerar links viejos con sufijo "- Clase X" (post-dedup el key es baseName).
+  const baseKey = fondoBaseName(displayName);
+  const fondo =
+    snap.rows.find((r) => r.key === displayName) ??
+    snap.rows.find((r) => r.key === baseKey);
   if (!fondo) {
     return NextResponse.json(
       { error: `Fondo "${displayName}" no encontrado` },

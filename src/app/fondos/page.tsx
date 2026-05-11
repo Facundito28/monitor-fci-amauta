@@ -135,7 +135,7 @@ export default async function FondosPage({
               Fondos Comunes de Inversión
             </h1>
             <p className="mt-1 text-sm text-amauta-text-secondary">
-              {total.toLocaleString("es-AR")} clases · cierre{" "}
+              {total.toLocaleString("es-AR")} fondos · cierre{" "}
               {fmtDateAr(snap.fecha)} · planilla diaria oficial de{" "}
               <a
                 href="https://www.cafci.org.ar/"
@@ -225,7 +225,7 @@ export default async function FondosPage({
                 <tr>
                   <th className="px-3 py-3 text-left font-bold">#</th>
                   <SortableHeader
-                    label="Fondo / Clase"
+                    label="Fondo"
                     baseKey="nombre"
                     activeSort={sortKey}
                     buildHref={buildHref}
