@@ -28,9 +28,9 @@ const ESTRATEGIA_BADGE: Record<string, string> = {
 
 const CONFIANZA_DOT: Record<Confianza, { cls: string; label: string }> = {
   override: { cls: "bg-blue-500",    label: "Override manual de Amauta" },
-  alta:     { cls: "bg-emerald-500", label: "Confianza alta — bucket dominante ≥50% o categoría CAFCI definitiva" },
-  media:    { cls: "bg-amber-400",   label: "Confianza media — bucket dominante 30-50%; contrastar con CAFCI" },
-  baja:     { cls: "bg-orange-500",  label: "Confianza baja — fallback a macro, ningún bucket alcanza threshold" },
+  alta:     { cls: "bg-emerald-500", label: "Mandate confirmado — concentración ≥80% sostenida o categoría CAFCI MM/RV/Mixta" },
+  media:    { cls: "bg-amber-400",   label: "Tactical con tilt fuerte — sesgo 50-79% en un bucket, puede rotar" },
+  baja:     { cls: "bg-orange-500",  label: "Tactical sin tilt claro — cartera diversificada, clasificación macro genérica" },
   macro:    { cls: "bg-slate-400",   label: "Sin composición pública — clasificación solo macro" },
 };
 
@@ -79,9 +79,9 @@ export function ConfianzaPill({
   const cfg = CONFIANZA_DOT[confianza];
   const labelText: Record<Confianza, string> = {
     override: "Override manual",
-    alta: "Confianza alta",
-    media: "Confianza media",
-    baja: "Confianza baja",
+    alta: "Mandate",
+    media: "Tactical · tilt fuerte",
+    baja: "Tactical · diversificado",
     macro: "Solo macro",
   };
   const pillBg: Record<Confianza, string> = {

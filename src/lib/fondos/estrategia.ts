@@ -110,39 +110,61 @@ export interface CartHolding {
 }
 
 /**
- * Versión "ojos abiertos" del clasificador: si el fondo tiene cartera y los
- * holdings tienen una concentración clara en un bucket específico (CER, Lecaps,
- * Money Market, DL, Hard USD), devolvemos ese bucket. Sino, fallback al
- * clasificador macro estándar (`inferEstrategia`).
+ * Thresholds de "MANDATE" — al pasar de aquí, decimos que el fondo es
+ * STRUCTURALMENTE de esa estrategia (probable mandato del prospecto). Por
+ * debajo, es discrecional / tactical: la composición rota con el mercado
+ * y NO podemos llamarlo "CER" o "Lecaps" sin engañar al asesor.
  *
- * Diseño (BLOQUE 3 — Opción A, May 2026):
+ * BLOQUE 8 — May 2026, ajuste para distinguir mandate vs tactical:
+ *
+ *   - "Balanz Institucional" tiene 83% CER → mandate CER (siempre será CER).
+ *   - "Balanz Capital Ahorro" tiene 72% CER hoy pero su benchmark es Badlar
+ *     y duration ≤0.5y → T+1 discretional, hoy con tilt CER pero mañana
+ *     puede rotar a Lecap o cash. Llamarlo "CER" sería incorrecto.
+ *
+ * Verificado contra los 1.085 fondos con holdings reales (2026-05-11):
+ *   - 52 fondos pasan threshold 80% en CER  → 4.8% son CER mandate
+ *   - 6 fondos pasan 80% en Lecaps          → 0.5% Lecaps mandate
+ *   - 9 fondos pasan 80% en Hard USD        → 0.8% Hard USD mandate
+ *   - 0 fondos pasan 60% en DL              → DL casi nunca es mandate puro
+ *
+ * El resto (94%) se clasifica por macro (Renta Fija ARS/USD/Mixta/MM/RV),
+ * que sigue siendo correcto — son fondos cuya identidad NO es el bucket
+ * específico sino el "estilo" de inversión. El tilt actual se muestra en
+ * la ficha del fondo via composición y razón del clasificador.
+ */
+export const MANDATE_THRESHOLD = {
+  CER: 80,
+  LECAPS: 80,
+  HARD_USD: 80,
+  DL: 60,            // Más bajo: el universo DL es chico, un 60% ya es mandate
+  MM_CASH: 60,       // Si cash equivalents > 60%, es MM funcionalmente
+} as const;
+
+/**
+ * Thresholds de "TILT" — concentración intermedia. No es mandate pero es
+ * un sesgo visible para el asesor. Se reporta en la razón sin cambiar la
+ * etiqueta final (el fondo sigue clasificándose como macro RF).
+ *
+ * Solo se usa para razonamiento humano-legible. El bucket dominante < 80%
+ * cae a macro bucket por convención.
+ */
+const TILT_THRESHOLD = 50;
+
+/**
+ * Versión "ojos abiertos" del clasificador: si el fondo tiene cartera con
+ * MANDATE-level concentration (≥80% para CER/Lecaps/Hard USD; ≥60% para DL),
+ * devolvemos ese bucket. Sino, fallback al clasificador macro
+ * (`inferEstrategia`).
+ *
+ * Reglas (orden de chequeo):
  *   1. Guardrail por categoría macro CAFCI — si el catálogo ya dice "Money
- *      Market" / "Renta Variable" / "Renta Mixta", respetamos. Holdings de
- *      un MM dinámico pueden tener 30% en Lecaps cortos y aún así ser
- *      conceptualmente MM; idem un fondo mixto con concentración temporal
- *      en CER. La categoría macro de CAFCI es señal fuerte sobre la
- *      INTENCIÓN del fondo (no la composición puntual).
- *   2. Para fondos de Renta Fija solo: clasificamos por holdings con
- *      thresholds más permisivos (30% en vez de 50%) y resolvemos empates
- *      por SHARE DOMINANTE entre los candidatos que pasan threshold.
- *
- * Thresholds (BLOQUE 3 — Opción A):
- *   - CER ≥ 30%          (antes 50)
- *   - Lecaps ≥ 30%       (antes 50)
- *   - Dólar Linked ≥ 20% (antes 30)
- *   - Hard USD ≥ 30%     (antes 50)
- *   - Money Market cash ≥ 60% (sin cambio — sigue siendo un piso alto)
- *
- * Resolución de empate: si pasan threshold varios buckets (ej. CER 35% +
- * Lecaps 32%), gana el de mayor share. Antes con "first match wins" el
- * orden de chequeo dictaba la respuesta, lo cual era arbitrario.
- *
- * Verificado contra holdings reales 2026-05-11:
- *   - Balanz Capital Ahorro: Lecer+Boncer ~68% → CER ✅
- *   - Balanz Institucional:  Boncer ~74%        → CER ✅
- *   - Compass Renta Fija:    Hard USD ~46%      → Hard USD ✅ (antes RF USD)
- *   - Pellegrini RF III:     Lecap ~49%, CER ~25% → Lecaps ✅
- *   - Pellegrini RF II:      CER ~55%, Lecap ~26% → CER ✅
+ *      Market" / "Renta Variable" / "Renta Mixta", respetamos.
+ *   2. Cash equivalents ≥60% → promotion a Money Market (caso T+1 con todo
+ *      en cauciones — funcionalmente es MM).
+ *   3. Bucket dominante ≥ MANDATE_THRESHOLD → CER / Lecaps / DL / Hard USD.
+ *   4. Empate por share dominante entre candidatos que pasan threshold.
+ *   5. Fallback a macro (Renta Fija ARS / USD / etc.).
  */
 export function inferEstrategiaWithHoldings(
   input: ClassifierInput,
@@ -150,7 +172,6 @@ export function inferEstrategiaWithHoldings(
 ): StandardEstrategia {
   if (holdings.length === 0) return inferEstrategia(input);
 
-  // Guardrail macro: categorías no-RF se respetan del catálogo CAFCI.
   const cat = (input.categoria ?? "").toLowerCase();
   if (cat.includes("money market") || cat.includes("mercado de dinero")) {
     return "Money Market";
@@ -158,12 +179,7 @@ export function inferEstrategiaWithHoldings(
   if (cat.includes("renta variable")) return "Renta Variable";
   if (cat.includes("renta mixta")) return "Renta Mixta";
 
-  // Aggregate share por tipo_activo (solo para fondos de Renta Fija de acá).
-  let cer = 0,
-    lecaps = 0,
-    dl = 0,
-    hardUsd = 0,
-    cash = 0;
+  let cer = 0, lecaps = 0, dl = 0, hardUsd = 0, cash = 0;
   for (const h of holdings) {
     const t = h.tipo_activo;
     const s = h.share || 0;
@@ -175,24 +191,19 @@ export function inferEstrategiaWithHoldings(
       cash += s;
   }
 
-  // "Promotion to MM" — fondo categorizado RF pero con >60% en cash
-  // equivalents. Caso raro pero existe (cierres en pesos de fondos T+1).
-  if (cash >= 60) return "Money Market";
+  if (cash >= MANDATE_THRESHOLD.MM_CASH) return "Money Market";
 
-  // Candidatos: cualquier bucket que pasa su threshold. Gana el de mayor
-  // share, NO el primero en el orden de chequeo.
   const candidates: Array<{ name: StandardEstrategia; share: number }> = [];
-  if (cer >= 30) candidates.push({ name: "CER", share: cer });
-  if (lecaps >= 30) candidates.push({ name: "Lecaps", share: lecaps });
-  if (dl >= 20) candidates.push({ name: "Dólar Linked", share: dl });
-  if (hardUsd >= 30) candidates.push({ name: "Hard USD", share: hardUsd });
+  if (cer >= MANDATE_THRESHOLD.CER) candidates.push({ name: "CER", share: cer });
+  if (lecaps >= MANDATE_THRESHOLD.LECAPS) candidates.push({ name: "Lecaps", share: lecaps });
+  if (dl >= MANDATE_THRESHOLD.DL) candidates.push({ name: "Dólar Linked", share: dl });
+  if (hardUsd >= MANDATE_THRESHOLD.HARD_USD) candidates.push({ name: "Hard USD", share: hardUsd });
 
   if (candidates.length > 0) {
     candidates.sort((a, b) => b.share - a.share);
     return candidates[0].name;
   }
 
-  // Sin concentración clara — vuelta al macro bucket (Renta Fija ARS / USD).
   return inferEstrategia(input);
 }
 
@@ -248,22 +259,29 @@ export async function loadEstrategiaOverrides(): Promise<
 }
 
 /**
- * Niveles de confianza en la clasificación. Tienen que ser auditables —
- * el asesor necesita saber CUÁNDO confiar en la etiqueta:
+ * Niveles de confianza en la clasificación — auditables para que el asesor
+ * sepa CUÁNDO confiar en la etiqueta y cuándo verla solo como contexto:
  *
- *   - "override":  manual de Amauta (tabla fci_estrategia_override). Confianza
- *                  máxima: alguien lo verificó.
- *   - "alta":      bucket dominante ≥ 50% en holdings, O macro CAFCI MM/RV/Mixta
- *                  (que la regulación obliga a declarar correctamente).
- *   - "media":     bucket dominante 30-49% en holdings — concentración clara
- *                  pero no abrumadora; un asesor debería contrastar con la
- *                  ficha CAFCI para confirmar.
- *   - "baja":      ningún bucket alcanza threshold pero hay holdings — el
- *                  clasificador cae a la macro categoría (RF ARS/USD). La
- *                  etiqueta es genérica, no específica de sub-estrategia.
- *   - "macro":     sin holdings publicados por CAFCI — solo se conoce la
- *                  macro categoría. La etiqueta es la coarse + moneda y NO
- *                  podemos afinar más sin info adicional.
+ *   - "override":  manual de Amauta (tabla fci_estrategia_override).
+ *                  Confianza máxima: alguien lo verificó.
+ *
+ *   - "alta":      MANDATE confirmado. El fondo es ESTRUCTURALMENTE de esa
+ *                  estrategia. Dos caminos para llegar aquí:
+ *                    a) Concentración ≥ MANDATE_THRESHOLD (CER ≥80%, etc.)
+ *                       — el prospecto obliga al gerente a mantenerse ahí
+ *                       independiente del mercado, y eso se ve en la cartera.
+ *                    b) Macro CAFCI MM/RV/Mixta — regulatoriamente declarado.
+ *
+ *   - "media":     TACTICAL con tilt fuerte. La etiqueta es la macro pero
+ *                  hay un sesgo notable hacia un bucket (50-79%). El asesor
+ *                  debería leer la composición — el tilt actual puede rotar.
+ *
+ *   - "baja":      TACTICAL sin tilt claro. Cartera diversificada o
+ *                  mix < 50% en cualquier bucket. La macro es genérica.
+ *
+ *   - "macro":     Sin holdings publicados por CAFCI. La clasificación es
+ *                  SOLO la macro categoría + moneda — no podemos saber si
+ *                  es mandate ni cuál es el tilt actual.
  */
 export type Confianza = "override" | "alta" | "media" | "baja" | "macro";
 
@@ -358,38 +376,56 @@ export function applyEstrategiaWithConfidence(
   }
 
   // 5) Promotion to MM cuando cash equivalents dominan.
-  if (cash >= 60) {
+  if (cash >= MANDATE_THRESHOLD.MM_CASH) {
     return {
       estrategia: "Money Market",
       confianza: "alta",
-      razon: `Cash + cauciones + plazos fijos suman ${cash.toFixed(0)}% — domina liquidez.`,
+      razon: `Cash + cauciones + plazos fijos suman ${cash.toFixed(0)}% — domina liquidez (mandate de mercado de dinero).`,
     };
   }
 
-  // 6) Candidatos con threshold; gana max share.
-  const candidates: Array<{ name: StandardEstrategia; share: number }> = [];
-  if (cer >= 30) candidates.push({ name: "CER", share: cer });
-  if (lecaps >= 30) candidates.push({ name: "Lecaps", share: lecaps });
-  if (dl >= 20) candidates.push({ name: "Dólar Linked", share: dl });
-  if (hardUsd >= 30) candidates.push({ name: "Hard USD", share: hardUsd });
+  // 6) MANDATE candidates: solo buckets que pasen el umbral alto (CER ≥80,
+  //    Lecaps ≥80, Hard USD ≥80, DL ≥60). Por debajo de eso consideramos
+  //    el fondo tactical — su composición rota con el mercado y la etiqueta
+  //    correcta es la macro (RF ARS / RF USD), aunque mencionamos el tilt.
+  const mandateCandidates: Array<{ name: StandardEstrategia; share: number }> = [];
+  if (cer >= MANDATE_THRESHOLD.CER) mandateCandidates.push({ name: "CER", share: cer });
+  if (lecaps >= MANDATE_THRESHOLD.LECAPS) mandateCandidates.push({ name: "Lecaps", share: lecaps });
+  if (dl >= MANDATE_THRESHOLD.DL) mandateCandidates.push({ name: "Dólar Linked", share: dl });
+  if (hardUsd >= MANDATE_THRESHOLD.HARD_USD) mandateCandidates.push({ name: "Hard USD", share: hardUsd });
 
-  if (candidates.length > 0) {
-    candidates.sort((a, b) => b.share - a.share);
-    const winner = candidates[0];
-    const confianza: Confianza = winner.share >= 50 ? "alta" : "media";
-    const otros = candidates
-      .slice(1)
-      .map((c) => `${c.name} ${c.share.toFixed(0)}%`)
-      .join(", ");
-    const razon = otros
-      ? `${winner.name} domina con ${winner.share.toFixed(0)}% de holdings visibles · coexiste con: ${otros}.`
-      : `${winner.name} domina con ${winner.share.toFixed(0)}% de holdings visibles.`;
-    return { estrategia: winner.name, confianza, razon };
+  if (mandateCandidates.length > 0) {
+    mandateCandidates.sort((a, b) => b.share - a.share);
+    const winner = mandateCandidates[0];
+    return {
+      estrategia: winner.name,
+      confianza: "alta",
+      razon: `Mandate ${winner.name} — concentración ${winner.share.toFixed(0)}% sostenida (≥ ${getThresholdFor(winner.name)}% del threshold de mandate). El fondo está estructuralmente posicionado en este bucket.`,
+    };
   }
 
-  // 7) Hay holdings pero ningún bucket alcanza threshold — fallback macro.
+  // 7) Tactical: hay holdings pero ningún bucket llega al threshold de
+  //    mandate. La etiqueta correcta es la macro; en la razón mencionamos
+  //    el tilt actual para que el asesor sepa el sesgo de la cartera.
   const estrategia = inferEstrategia(input);
-  const buckets = [
+  const tilts: Array<{ name: string; share: number }> = [];
+  if (cer >= TILT_THRESHOLD) tilts.push({ name: "CER", share: cer });
+  if (lecaps >= TILT_THRESHOLD) tilts.push({ name: "Lecaps", share: lecaps });
+  if (dl >= TILT_THRESHOLD * 0.6) tilts.push({ name: "Dólar Linked", share: dl }); // 30% para DL
+  if (hardUsd >= TILT_THRESHOLD) tilts.push({ name: "Hard USD", share: hardUsd });
+  tilts.sort((a, b) => b.share - a.share);
+
+  if (tilts.length > 0) {
+    const topTilt = tilts[0];
+    return {
+      estrategia,
+      confianza: "media",
+      razon: `Fondo discrecional con tilt actual hacia ${topTilt.name} (${topTilt.share.toFixed(0)}%) — concentración no llega al threshold de mandate (≥${getThresholdFor(topTilt.name as StandardEstrategia)}%), así que es tactical: la composición puede rotar.`,
+    };
+  }
+
+  // 8) Sin tilt detectable: cartera muy diversificada.
+  const allBuckets = [
     cer > 0 ? `CER ${cer.toFixed(0)}%` : null,
     lecaps > 0 ? `Lecaps ${lecaps.toFixed(0)}%` : null,
     dl > 0 ? `DL ${dl.toFixed(0)}%` : null,
@@ -400,10 +436,24 @@ export function applyEstrategiaWithConfidence(
   return {
     estrategia,
     confianza: "baja",
-    razon: buckets
-      ? `Cartera diversificada — ningún bucket alcanza threshold (${buckets}). Fallback a macro categoría.`
-      : "Composición sin concentración en buckets reconocidos (Lecer/Boncer/Lecap/DL/Hard USD). Fallback a macro categoría.",
+    razon: allBuckets
+      ? `Cartera diversificada sin tilt notable (${allBuckets}). Clasificación macro genérica.`
+      : "Composición sin concentración en buckets reconocidos. Clasificación macro genérica.",
   };
+}
+
+/**
+ * Helper: threshold de mandate por nombre de estrategia para mensajes
+ * humano-legibles en la razón.
+ */
+function getThresholdFor(name: StandardEstrategia): number {
+  switch (name) {
+    case "CER": return MANDATE_THRESHOLD.CER;
+    case "Lecaps": return MANDATE_THRESHOLD.LECAPS;
+    case "Dólar Linked": return MANDATE_THRESHOLD.DL;
+    case "Hard USD": return MANDATE_THRESHOLD.HARD_USD;
+    default: return 80;
+  }
 }
 
 /**
