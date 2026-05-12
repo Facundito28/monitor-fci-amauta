@@ -57,9 +57,9 @@ const CONFIANZA_HEX: Record<Confianza, { bg: string; border: string; dot: string
 
 const CONFIANZA_LABEL: Record<Confianza, string> = {
   override: "Override manual",
-  alta:     "Confianza alta",
-  media:    "Confianza media",
-  baja:     "Confianza baja",
+  alta:     "Mandate",
+  media:    "Tactical (tilt fuerte)",
+  baja:     "Tactical (diversificado)",
   macro:    "Solo macro",
 };
 
