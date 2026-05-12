@@ -139,6 +139,23 @@ export interface EnrichedRow {
   fondoId: number | null;
 
   /**
+   * Benchmark de referencia declarado por el gerente al CAFCI, ej. "Badlar".
+   * Viene de `fci_fondo_meta` populated por el cron semanal. null si no
+   * tenemos metadata para este fondo todavía.
+   */
+  benchmark: string | null;
+
+  /**
+   * Duration declarada por CAFCI, ej. "Menor o Igual a 0.5 Año".
+   * Útil para distinguir fondos USD Corto / Largo plazo dentro del macro
+   * bucket "Renta Fija USD".
+   */
+  duration: string | null;
+
+  /** Fecha de inicio del fondo (primer día de operación), ISO date. */
+  inicio: string | null;
+
+  /**
    * Estrategia inferida. Computed from (a) override manual en Supabase, sino
    * (b) inferencia por holdings de cartera si están disponibles, sino
    * (c) fallback al macro-bucket por categoría + moneda.
@@ -297,10 +314,13 @@ function buildRow(
     fondoId,
     estrategia,
     cartera,
-    // Los campos de dedup se rellenan luego en _buildSnapshot (esta función
-    // sigue siendo "por-clase" y se preserva pura para tests/futuro uso).
+    // Estos campos se rellenan luego en _buildSnapshot — buildRow sigue
+    // siendo "por-clase" y queda puro para tests / reusos futuros.
     claseRepresentativa: null,
     clasesDisponibles: [],
+    benchmark: null,
+    duration: null,
+    inicio: null,
   };
 }
 
@@ -308,11 +328,33 @@ function buildRow(
 
 // ─── Supabase loaders for cartera + meta (cached 6h) ────────────────────────
 
+interface FondoMetaInfo {
+  /** Benchmark de referencia, ej. "Badlar". */
+  benchmark: string | null;
+  /** Duration declarada por CAFCI, ej. "Menor o Igual a 0.5 Año". */
+  duration: string | null;
+  /** Región de inversión, ej. "Argentina" / "Latam" / "Global". */
+  region: string | null;
+  /** Horizonte sugerido por CAFCI, ej. "Corto Plazo". */
+  horizonte: string | null;
+  /** Tipo de renta detallado del catálogo, ej. "Renta Fija ARS Discrecional". */
+  tipoRentaNombre: string | null;
+  /** Fecha de inicio del fondo (ISO date, primer día de operación). */
+  inicio: string | null;
+  /** Marca "Money Market puro" del catálogo CAFCI. */
+  mmPuro: boolean | null;
+}
+
 interface CarteraStore {
   /** codigo_cafci_clase → fondo_id padre. */
   claseToFondo: Map<number, number>;
   /** fondo_id → top holdings ordenados por share desc. */
   holdingsByFondo: Map<number, CartHolding[]>;
+  /**
+   * fondo_id → metadata oficial CAFCI (benchmark, duration, region, etc.).
+   * Los datos son por-fondo, no por-clase, así que dedupeamos al cargar.
+   */
+  metaByFondo: Map<number, FondoMetaInfo>;
 }
 
 let carteraCache: { data: CarteraStore; expiresAt: number } | null = null;
@@ -328,19 +370,26 @@ async function loadCarteraStore(): Promise<CarteraStore> {
     const empty: CarteraStore = {
       claseToFondo: new Map(),
       holdingsByFondo: new Map(),
+      metaByFondo: new Map(),
     };
     try {
       const supa = publicClient();
 
-      // 1) clase → fondo mapping (paginated; ~4566 rows). Single shot is enough
-      // (default Supabase row cap is high enough for one full table read here).
+      // 1) clase → fondo mapping + metadata oficial por fondo (paginated;
+      //    ~4566 rows en fci_fondo_meta). Metadata por-fondo (benchmark,
+      //    duration, region, etc.) la deduplicamos: el primer hit de cada
+      //    fondo_id gana, el resto se descarta (los valores son idénticos
+      //    entre clases del mismo fondo).
       const claseToFondo = new Map<number, number>();
+      const metaByFondo = new Map<number, FondoMetaInfo>();
       let from = 0;
       const PAGE = 1000;
       while (true) {
         const { data, error } = await supa
           .from("fci_fondo_meta")
-          .select("codigo_cafci_clase, fondo_id")
+          .select(
+            "codigo_cafci_clase, fondo_id, benchmark, duration, region, horizonte, tipo_renta_nombre, inicio, mm_puro",
+          )
           .order("codigo_cafci_clase", { ascending: true })
           .range(from, from + PAGE - 1);
         if (error) {
@@ -354,6 +403,21 @@ async function loadCarteraStore(): Promise<CarteraStore> {
             typeof r.fondo_id === "number"
           ) {
             claseToFondo.set(r.codigo_cafci_clase, r.fondo_id);
+            if (!metaByFondo.has(r.fondo_id)) {
+              metaByFondo.set(r.fondo_id, {
+                benchmark: typeof r.benchmark === "string" ? r.benchmark : null,
+                duration: typeof r.duration === "string" ? r.duration : null,
+                region: typeof r.region === "string" ? r.region : null,
+                horizonte:
+                  typeof r.horizonte === "string" ? r.horizonte : null,
+                tipoRentaNombre:
+                  typeof r.tipo_renta_nombre === "string"
+                    ? r.tipo_renta_nombre
+                    : null,
+                inicio: typeof r.inicio === "string" ? r.inicio : null,
+                mmPuro: typeof r.mm_puro === "boolean" ? r.mm_puro : null,
+              });
+            }
           }
         }
         if (data.length < PAGE) break;
@@ -408,7 +472,7 @@ async function loadCarteraStore(): Promise<CarteraStore> {
         }
       }
 
-      const result: CarteraStore = { claseToFondo, holdingsByFondo };
+      const result: CarteraStore = { claseToFondo, holdingsByFondo, metaByFondo };
       carteraCache = { data: result, expiresAt: Date.now() + CARTERA_TTL_MS };
       return result;
     } catch (e) {
@@ -525,6 +589,7 @@ async function _buildSnapshot(): Promise<MarketSnapshot> {
     //           key/displayName por baseName (URL estable y limpia) ──────────
     const baseRow = buildRow(rep, overrides, fondoId, holdings);
     const letraRep = parseClaseLetra(rep.fondo);
+    const meta = fondoId != null ? carteraStore.metaByFondo.get(fondoId) : null;
     const row: EnrichedRow = {
       ...baseRow,
       key: baseName,
@@ -532,6 +597,9 @@ async function _buildSnapshot(): Promise<MarketSnapshot> {
       patrimonio: patrimonioFondo > 0 ? patrimonioFondo : baseRow.patrimonio,
       claseRepresentativa: letraRep || null,
       clasesDisponibles,
+      benchmark: meta?.benchmark ?? null,
+      duration: meta?.duration ?? null,
+      inicio: meta?.inicio ?? null,
     };
 
     if (row.categoria) categoriasSet.add(row.categoria);
