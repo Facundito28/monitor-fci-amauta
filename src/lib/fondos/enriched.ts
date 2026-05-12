@@ -22,7 +22,7 @@ import {
 } from "./client";
 import type { CafciSheetRow } from "./client";
 import {
-  applyEstrategia,
+  applyEstrategiaWithConfidence,
   loadEstrategiaOverrides,
   sortEstrategias,
   type CartHolding,
@@ -30,7 +30,7 @@ import {
 } from "./estrategia";
 import { publicClient } from "@/lib/supabase/server";
 
-export type { CartHolding, Estrategia } from "./estrategia";
+export type { CartHolding, Estrategia, Confianza } from "./estrategia";
 
 /**
  * Datos de UNA clase del fondo. Cada fondo CAFCI suele tener entre 1 y 8
@@ -163,6 +163,21 @@ export interface EnrichedRow {
   estrategia: Estrategia;
 
   /**
+   * Nivel de confianza de la clasificación. Crítico para la UI: el asesor
+   * necesita saber cuándo la etiqueta es indubitable y cuándo es solo macro
+   * fallback. Ver `src/lib/fondos/estrategia.ts` para la semántica completa.
+   */
+  estrategiaConfianza: import("./estrategia").Confianza;
+
+  /**
+   * Explicación humano-legible del por qué de la clasificación, ej:
+   *   "CER domina con 68% de holdings visibles."
+   *   "Composición no publicada por CAFCI — clasificación basada solo en
+   *    macro-categoría + moneda. No es posible afinar a sub-estrategia."
+   */
+  estrategiaRazon: string;
+
+  /**
    * Composición de cartera (top N holdings, ordenados por share desc).
    * Vacía si todavía no se scrapeo este fondo. Cada `tipo_activo` viene de
    * cartera-client.ts:classifyActivo.
@@ -267,7 +282,7 @@ function buildRow(
   const ret13m = r.var13M;
   const categoria = macroFromGranular(r.categoriaDetallada);
   const moneda = monedaLabel(r.moneda);
-  const estrategia = applyEstrategia(
+  const inferred = applyEstrategiaWithConfidence(
     {
       fondo: r.fondo,
       categoria,
@@ -277,6 +292,7 @@ function buildRow(
     overrides,
     cartera,
   );
+  const estrategia = inferred.estrategia;
   return {
     key: r.fondo,
     displayName: r.fondo,
@@ -313,6 +329,8 @@ function buildRow(
     codigoCafci: r.codigoCafci,
     fondoId,
     estrategia,
+    estrategiaConfianza: inferred.confianza,
+    estrategiaRazon: inferred.razon,
     cartera,
     // Estos campos se rellenan luego en _buildSnapshot — buildRow sigue
     // siendo "por-clase" y queda puro para tests / reusos futuros.
