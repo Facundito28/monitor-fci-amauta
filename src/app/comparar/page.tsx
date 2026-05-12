@@ -9,6 +9,7 @@ import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
 import { fmtDateAr, getMarketSnapshotWithReturns } from "@/lib/fondos/enriched";
 import type { EnrichedRow } from "@/lib/fondos/enriched";
 import { fondoBaseName } from "@/lib/fondos/client";
+import { EstrategiaBadge } from "@/components/EstrategiaBadge";
 
 const MAX_FONDOS = 4;
 
@@ -224,7 +225,12 @@ export default async function CompararPage({
                   <ComparisonRow
                     label="Estrategia"
                     rows={selected}
-                    get={(r) => r.estrategia}
+                    get={(r) => (
+                      <EstrategiaBadge
+                        value={r.estrategia}
+                        confianza={r.estrategiaConfianza}
+                      />
+                    )}
                   />
                   <ComparisonRow
                     label="Categoría"
@@ -355,7 +361,8 @@ function ComparisonRow({
 }: {
   label: string;
   rows: EnrichedRow[];
-  get: (r: EnrichedRow) => string;
+  /** Puede retornar string para celdas simples, o ReactNode para celdas con badge/JSX. */
+  get: (r: EnrichedRow) => React.ReactNode;
   align?: "left" | "right";
 }) {
   return (

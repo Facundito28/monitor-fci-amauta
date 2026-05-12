@@ -301,7 +301,7 @@ export default async function FondosPage({
                           </div>
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap align-top">
-                          <EstrategiaBadge value={r.estrategia} />
+                          <EstrategiaBadge value={r.estrategia} confianza={r.estrategiaConfianza} />
                         </td>
                         <td className="px-3 py-3.5 whitespace-nowrap hidden md:table-cell align-top">
                           {r.moneda ? (

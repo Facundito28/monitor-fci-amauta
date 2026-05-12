@@ -20,9 +20,10 @@ import {
   getMarketSnapshotWithReturns,
 } from "@/lib/fondos/enriched";
 import type { ClaseInfo } from "@/lib/fondos/enriched";
+import type { Confianza } from "@/lib/fondos/estrategia";
 import { fondoBaseName } from "@/lib/fondos/client";
 import { fmtCompactCurrency, fmtNumber, fmtReturn } from "@/lib/utils/format";
-import { EstrategiaBadge } from "@/components/EstrategiaBadge";
+import { EstrategiaBadge, ConfianzaPill } from "@/components/EstrategiaBadge";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -101,9 +102,13 @@ export default async function FondoDetailPage({
                 )}
               </div>
 
-              {/* Chips de metadata */}
+              {/* Chips de metadata + confianza */}
               <div className="mt-4 flex flex-wrap gap-2">
-                <EstrategiaBadge value={fondo.estrategia} />
+                <EstrategiaBadge
+                  value={fondo.estrategia}
+                  confianza={fondo.estrategiaConfianza}
+                />
+                <ConfianzaPill confianza={fondo.estrategiaConfianza} />
                 {fondo.categoria && fondo.categoria !== fondo.estrategia && (
                   <Chip tone="dark">{fondo.categoria}</Chip>
                 )}
@@ -143,6 +148,15 @@ export default async function FondoDetailPage({
             </div>
           </div>
         </section>
+
+        {/* ── Cómo se clasificó este fondo (transparencia) ─────────────── */}
+        <ClasificacionBlock
+          estrategia={fondo.estrategia}
+          confianza={fondo.estrategiaConfianza}
+          razon={fondo.estrategiaRazon}
+          codigoCafci={fondo.codigoCafci}
+          hasHoldings={fondo.cartera.length > 0}
+        />
 
         {/* ── Composición de Cartera ─────────────────────────────────── */}
         {fondo.cartera.length > 0 && (
@@ -299,6 +313,84 @@ export default async function FondoDetailPage({
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
+
+function ClasificacionBlock({
+  estrategia,
+  confianza,
+  razon,
+  codigoCafci,
+  hasHoldings,
+}: {
+  estrategia: string;
+  confianza: Confianza;
+  razon: string;
+  codigoCafci: number | null;
+  hasHoldings: boolean;
+}) {
+  // Estilos del block según nivel — visualmente claro de un vistazo si esta
+  // clasificación es indubitable o necesita revisión manual.
+  const palette: Record<Confianza, { bg: string; border: string; barFrom: string; barTo: string }> = {
+    override: { bg: "bg-blue-50",    border: "border-blue-200",    barFrom: "from-blue-400",    barTo: "to-blue-600" },
+    alta:     { bg: "bg-emerald-50", border: "border-emerald-200", barFrom: "from-emerald-400", barTo: "to-emerald-600" },
+    media:    { bg: "bg-amber-50",   border: "border-amber-200",   barFrom: "from-amber-400",   barTo: "to-amber-600" },
+    baja:     { bg: "bg-orange-50",  border: "border-orange-200",  barFrom: "from-orange-400",  barTo: "to-orange-600" },
+    macro:    { bg: "bg-slate-50",   border: "border-slate-200",   barFrom: "from-slate-400",   barTo: "to-slate-600" },
+  };
+  const p = palette[confianza];
+  const showOverrideHint = confianza === "media" || confianza === "baja" || confianza === "macro";
+  // Template SQL para que el asesor pegue en Supabase Studio si decide override.
+  const sqlTemplate = codigoCafci
+    ? `INSERT INTO fci_estrategia_override (codigo_cafci, estrategia, nota)
+VALUES (${codigoCafci}, 'CER', 'Override manual Amauta');
+-- Estrategias válidas: Money Market, Lecaps, CER, Dólar Linked, Hard USD,
+-- Renta Fija ARS, Renta Fija USD, Renta Variable, Renta Mixta, Otros
+-- O cualquier string custom`
+    : null;
+
+  return (
+    <section className={`mb-6 rounded-sm border ${p.border} ${p.bg} shadow-card overflow-hidden`}>
+      {/* Barra de color superior — refuerza visualmente el nivel */}
+      <div className={`h-[3px] bg-gradient-to-r ${p.barFrom} ${p.barTo}`} aria-hidden />
+
+      <div className="px-6 py-5">
+        <div className="flex flex-wrap items-center gap-3 mb-2">
+          <p className="text-[11px] uppercase tracking-[0.18em] font-extrabold text-amauta-bordo">
+            Cómo se clasificó este fondo
+          </p>
+          <ConfianzaPill confianza={confianza} />
+        </div>
+
+        <p className="text-sm text-amauta-text-secondary leading-relaxed">
+          <strong className="text-amauta-text">Estrategia: {estrategia}.</strong>{" "}
+          {razon}
+        </p>
+
+        {!hasHoldings && (
+          <p className="mt-2 text-xs text-amauta-text-tertiary italic">
+            ⓘ Este fondo no tiene composición publicada en CAFCI (Money Market o cerrado / nuevo). El cron semanal lo marca como sentinel y la clasificación se basa solo en categoría macro + moneda.
+          </p>
+        )}
+
+        {showOverrideHint && codigoCafci && (
+          <details className="mt-3 group">
+            <summary className="cursor-pointer text-xs font-extrabold uppercase tracking-wider text-amauta-bordo hover:text-amauta-bordo-hover transition-colors inline-flex items-center gap-1.5">
+              <span aria-hidden>⚙</span>
+              ¿No coincide? Override manual
+            </summary>
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-amauta-text-secondary leading-relaxed">
+                Si la mesa de Amauta conoce la estrategia real, se puede sobrescribir cargando una fila en la tabla <code className="text-[11px] bg-white px-1 py-0.5 rounded-xs border border-amauta-bg-light">fci_estrategia_override</code> de Supabase. La UI lee con TTL de 6h, así que el cambio puede tardar hasta esa ventana en propagarse.
+              </p>
+              <pre className="text-[11px] bg-amauta-dark text-amauta-yellow/90 rounded-xs p-3 overflow-x-auto font-mono leading-relaxed">
+{sqlTemplate}
+              </pre>
+            </div>
+          </details>
+        )}
+      </div>
+    </section>
+  );
+}
 
 function Chip({
   children,

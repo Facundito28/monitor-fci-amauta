@@ -248,24 +248,174 @@ export async function loadEstrategiaOverrides(): Promise<
 }
 
 /**
- * Estrategia final del fondo, en orden de precedencia:
- *   1. Override manual en Supabase si existe (tabla fci_estrategia_override).
- *   2. Inferencia por holdings de cartera si están disponibles.
- *   3. Fallback al clasificador macro (categoría + moneda).
+ * Niveles de confianza en la clasificación. Tienen que ser auditables —
+ * el asesor necesita saber CUÁNDO confiar en la etiqueta:
+ *
+ *   - "override":  manual de Amauta (tabla fci_estrategia_override). Confianza
+ *                  máxima: alguien lo verificó.
+ *   - "alta":      bucket dominante ≥ 50% en holdings, O macro CAFCI MM/RV/Mixta
+ *                  (que la regulación obliga a declarar correctamente).
+ *   - "media":     bucket dominante 30-49% en holdings — concentración clara
+ *                  pero no abrumadora; un asesor debería contrastar con la
+ *                  ficha CAFCI para confirmar.
+ *   - "baja":      ningún bucket alcanza threshold pero hay holdings — el
+ *                  clasificador cae a la macro categoría (RF ARS/USD). La
+ *                  etiqueta es genérica, no específica de sub-estrategia.
+ *   - "macro":     sin holdings publicados por CAFCI — solo se conoce la
+ *                  macro categoría. La etiqueta es la coarse + moneda y NO
+ *                  podemos afinar más sin info adicional.
+ */
+export type Confianza = "override" | "alta" | "media" | "baja" | "macro";
+
+/**
+ * Resultado completo del clasificador — estrategia + nivel de confianza +
+ * explicación humano-legible. La razón debe ser auditable, no marketing —
+ * concentración numérica, override flag, o "sin composición publicada".
+ */
+export interface EstrategiaInferida {
+  estrategia: Estrategia;
+  confianza: Confianza;
+  razon: string;
+}
+
+/**
+ * Estrategia final del fondo + confianza + razón. En orden de precedencia:
+ *   1. Override manual en Supabase si existe (fci_estrategia_override).
+ *   2. Guardrail macro: si CAFCI declara MM/RV/Mixta, respetamos.
+ *   3. Inferencia por holdings (cuando hay datos del cron semanal).
+ *   4. Fallback al clasificador macro por categoría + moneda.
+ */
+export function applyEstrategiaWithConfidence(
+  input: ClassifierInput & { codigoCafci: number | null },
+  overrides: Map<number, Estrategia>,
+  holdings: CartHolding[] = [],
+): EstrategiaInferida {
+  // 1) Override manual de Amauta — confianza máxima.
+  if (input.codigoCafci != null) {
+    const ov = overrides.get(input.codigoCafci);
+    if (ov) {
+      return {
+        estrategia: ov,
+        confianza: "override",
+        razon: "Clasificación manual de Amauta (override en fci_estrategia_override).",
+      };
+    }
+  }
+
+  // 2) Guardrail macro CAFCI — categorías regulatoriamente declaradas.
+  const cat = (input.categoria ?? "").toLowerCase();
+  if (cat.includes("money market") || cat.includes("mercado de dinero")) {
+    return {
+      estrategia: "Money Market",
+      confianza: "alta",
+      razon:
+        holdings.length > 0
+          ? "CAFCI categoriza como Money Market — composición confirma cash + cauciones."
+          : "CAFCI categoriza como Money Market (composición no publicada).",
+    };
+  }
+  if (cat.includes("renta variable")) {
+    return {
+      estrategia: "Renta Variable",
+      confianza: "alta",
+      razon: "CAFCI categoriza como Renta Variable.",
+    };
+  }
+  if (cat.includes("renta mixta")) {
+    return {
+      estrategia: "Renta Mixta",
+      confianza: "alta",
+      razon: "CAFCI categoriza como Renta Mixta.",
+    };
+  }
+
+  // 3) Sin holdings → solo macro fallback (sin afinar). Confianza "macro".
+  if (holdings.length === 0) {
+    const estrategia = inferEstrategia(input);
+    return {
+      estrategia,
+      confianza: "macro",
+      razon:
+        "Composición no publicada por CAFCI — clasificación basada solo en macro-categoría + moneda. No es posible afinar a sub-estrategia (CER / Lecaps / DL / Hard USD) sin info adicional.",
+    };
+  }
+
+  // 4) Con holdings → analizar buckets.
+  let cer = 0,
+    lecaps = 0,
+    dl = 0,
+    hardUsd = 0,
+    cash = 0;
+  for (const h of holdings) {
+    const t = h.tipo_activo;
+    const s = h.share || 0;
+    if (t === "Lecer" || t === "Boncer") cer += s;
+    else if (t === "Lecap" || t === "Bonte") lecaps += s;
+    else if (t === "Dólar Linked") dl += s;
+    else if (t === "Hard USD") hardUsd += s;
+    else if (t === "Plazo Fijo" || t === "Cta Cte" || t === "Caución")
+      cash += s;
+  }
+
+  // 5) Promotion to MM cuando cash equivalents dominan.
+  if (cash >= 60) {
+    return {
+      estrategia: "Money Market",
+      confianza: "alta",
+      razon: `Cash + cauciones + plazos fijos suman ${cash.toFixed(0)}% — domina liquidez.`,
+    };
+  }
+
+  // 6) Candidatos con threshold; gana max share.
+  const candidates: Array<{ name: StandardEstrategia; share: number }> = [];
+  if (cer >= 30) candidates.push({ name: "CER", share: cer });
+  if (lecaps >= 30) candidates.push({ name: "Lecaps", share: lecaps });
+  if (dl >= 20) candidates.push({ name: "Dólar Linked", share: dl });
+  if (hardUsd >= 30) candidates.push({ name: "Hard USD", share: hardUsd });
+
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => b.share - a.share);
+    const winner = candidates[0];
+    const confianza: Confianza = winner.share >= 50 ? "alta" : "media";
+    const otros = candidates
+      .slice(1)
+      .map((c) => `${c.name} ${c.share.toFixed(0)}%`)
+      .join(", ");
+    const razon = otros
+      ? `${winner.name} domina con ${winner.share.toFixed(0)}% de holdings visibles · coexiste con: ${otros}.`
+      : `${winner.name} domina con ${winner.share.toFixed(0)}% de holdings visibles.`;
+    return { estrategia: winner.name, confianza, razon };
+  }
+
+  // 7) Hay holdings pero ningún bucket alcanza threshold — fallback macro.
+  const estrategia = inferEstrategia(input);
+  const buckets = [
+    cer > 0 ? `CER ${cer.toFixed(0)}%` : null,
+    lecaps > 0 ? `Lecaps ${lecaps.toFixed(0)}%` : null,
+    dl > 0 ? `DL ${dl.toFixed(0)}%` : null,
+    hardUsd > 0 ? `Hard USD ${hardUsd.toFixed(0)}%` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return {
+    estrategia,
+    confianza: "baja",
+    razon: buckets
+      ? `Cartera diversificada — ningún bucket alcanza threshold (${buckets}). Fallback a macro categoría.`
+      : "Composición sin concentración en buckets reconocidos (Lecer/Boncer/Lecap/DL/Hard USD). Fallback a macro categoría.",
+  };
+}
+
+/**
+ * Versión legacy compatible con código viejo — solo retorna la estrategia.
+ * Para nuevas integraciones usar `applyEstrategiaWithConfidence`.
  */
 export function applyEstrategia(
   input: ClassifierInput & { codigoCafci: number | null },
   overrides: Map<number, Estrategia>,
   holdings: CartHolding[] = [],
 ): Estrategia {
-  if (input.codigoCafci != null) {
-    const ov = overrides.get(input.codigoCafci);
-    if (ov) return ov;
-  }
-  if (holdings.length > 0) {
-    return inferEstrategiaWithHoldings(input, holdings);
-  }
-  return inferEstrategia(input);
+  return applyEstrategiaWithConfidence(input, overrides, holdings).estrategia;
 }
 
 /**
